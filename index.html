@@ -1,0 +1,1686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FlowPy</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M16 4l11 12-11 12L5 16z%27 fill=%27%237448E0%27/%3E%3C/svg%3E">
+<meta name="description" content="Build a flowchart, run it, and see the Python code it makes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F5F3EE; --panel:#FFFFFF; --ink:#1F2430; --muted:#6B7080; --line:#E3E0D8; --soft:#F0EEE8;
+  --accent:#2563EB; --accent-ink:#fff; --edge:#8D92A0; --grid:#DEDAD0;
+  --var-f:#FFF3D1; --var-s:#C98A12; --set-f:#FFE6DA; --set-s:#D9622F; --in-f:#DCEBFF; --in-s:#2F6FC9;
+  --out-f:#DCF3E3; --out-s:#24894A; --if-f:#ECE4FF; --if-s:#7448E0; --while-f:#FFE1EC; --while-s:#C93673;
+  --for-f:#D7F3F0; --for-s:#0E8585; --term-f:#E9EBF0; --term-s:#5F6675;
+  --run:#F59E0B; --err:#DC2626; --ok:#16A34A;
+  --code-bg:#1D2130; --code-ink:#E6E8EF; --code-muted:#6E7690; --code-hl:#3A3220;
+  --shadow:0 10px 30px rgba(20,24,40,.14);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#13151B; --panel:#1B1E26; --ink:#E7E9EE; --muted:#9AA0AE; --line:#2C303B; --soft:#232731;
+    --accent:#5B8DEF; --edge:#7D8394; --grid:#262A33;
+    --var-f:#3A3017; --var-s:#E2AE3E; --set-f:#3D2519; --set-s:#F08A5D; --in-f:#18304F; --in-s:#69A4F2;
+    --out-f:#173523; --out-s:#53C07D; --if-f:#2B2248; --if-s:#A487F5; --while-f:#3D1A2A; --while-s:#EB6FA3;
+    --for-f:#123634; --for-s:#3CC2C0; --term-f:#2A2E38; --term-s:#A3A9B8;
+    --code-bg:#0F1118; --code-hl:#3A3220; --shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13151B; --panel:#1B1E26; --ink:#E7E9EE; --muted:#9AA0AE; --line:#2C303B; --soft:#232731;
+  --accent:#5B8DEF; --edge:#7D8394; --grid:#262A33;
+  --var-f:#3A3017; --var-s:#E2AE3E; --set-f:#3D2519; --set-s:#F08A5D; --in-f:#18304F; --in-s:#69A4F2;
+  --out-f:#173523; --out-s:#53C07D; --if-f:#2B2248; --if-s:#A487F5; --while-f:#3D1A2A; --while-s:#EB6FA3;
+  --for-f:#123634; --for-s:#3CC2C0; --term-f:#2A2E38; --term-s:#A3A9B8;
+  --code-bg:#0F1118; --code-hl:#3A3220; --shadow:0 10px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--ink);font:500 14px/1.4 Nunito,system-ui,-apple-system,"Segoe UI",sans-serif}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:7px 12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{background:var(--soft)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.run{background:var(--ok);border-color:var(--ok);color:#fff;padding:7px 18px;font-size:15px}
+.btn.run.stop{background:var(--err);border-color:var(--err)}
+.btn.danger{color:var(--err)}
+.btn.small{padding:3px 9px;font-size:12px;border-radius:8px}
+.spacer{flex:1}
+
+header.top{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px;font-weight:800;font-size:18px;margin-right:6px}
+.brand svg{width:28px;height:28px}
+.title-input{border:1px solid transparent;background:transparent;border-radius:8px;padding:6px 8px;font-weight:700;font-size:15px;min-width:120px;width:220px}
+.title-input:hover,.title-input:focus{border-color:var(--line);background:var(--soft);outline:none}
+.speed{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:700;font-size:13px}
+.speed select{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:6px 8px}
+.menu-wrap{position:relative}
+.dropdown{position:absolute;z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:240px}
+.dropdown[hidden]{display:none}
+.dropdown button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:8px}
+.dropdown button:hover{background:var(--soft)}
+.dropdown small{display:block;color:var(--muted);font-weight:600}
+#exMenu{top:calc(100% + 6px);left:0}
+
+main.layout{flex:1;display:grid;grid-template-columns:210px minmax(0,1fr) 400px;min-height:0}
+.palette{overflow:auto;padding:12px 10px;border-right:1px solid var(--line);background:var(--panel)}
+.palette h3,.panel-head{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+.pal-list{display:flex;flex-direction:column;gap:6px}
+.pal-item{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:12px;cursor:grab;user-select:none;touch-action:none;background:var(--panel)}
+.pal-item:hover{border-color:var(--edge);background:var(--soft)}
+.pal-item svg{flex:none;width:40px;height:28px}
+.pal-item b{display:block;font-size:14px}
+.pal-item small{display:block;color:var(--muted);font-size:12px;line-height:1.25}
+.pal-hint{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.4}
+
+.canvas-wrap{position:relative;min-width:0;min-height:0}
+#canvas{position:absolute;inset:0;overflow:auto;background-color:var(--bg);background-image:radial-gradient(var(--grid) 1.2px,transparent 1.2px);background-size:22px 22px}
+#chart{display:block;margin:0 auto}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px;box-shadow:var(--shadow)}
+.zoom button{border:0;background:none;min-width:30px;padding:0 6px;height:28px;border-radius:6px;font-weight:800}
+.zoom button:hover{background:var(--soft)}
+.empty-hint{position:absolute;left:50%;top:230px;transform:translateX(-50%);background:var(--panel);border:1px dashed var(--edge);border-radius:14px;padding:14px 18px;text-align:center;max-width:330px;width:calc(100% - 32px);color:var(--muted)}
+.empty-hint b{color:var(--ink)}
+.empty-hint .row{display:flex;gap:6px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+
+/* flowchart */
+.edge{fill:none;stroke:var(--edge);stroke-width:1.8}
+.lbl{font:800 11px Nunito,system-ui,sans-serif;fill:var(--muted)}
+.node{cursor:pointer;touch-action:none}
+.node .shape{stroke-width:2}
+.node .cap{font:800 9.5px Nunito,system-ui,sans-serif;letter-spacing:.08em;text-anchor:middle;opacity:.85}
+.node .txt{font:700 13px Nunito,system-ui,sans-serif;fill:var(--ink);text-anchor:middle}
+.node .txt.ph{fill:var(--muted);font-style:italic;font-weight:600}
+.node:hover .shape{filter:brightness(.97);stroke-width:2.6}
+.node.hover-link .shape{stroke-width:3}
+.node.running .shape{stroke:var(--run)!important;stroke-width:4;filter:drop-shadow(0 0 6px var(--run))}
+.node.error .shape{stroke:var(--err)!important;stroke-width:4;filter:drop-shadow(0 0 6px var(--err))}
+.node.drag-src{opacity:.35}
+.node .del{opacity:0;transition:opacity .12s}
+.node:hover .del{opacity:1}
+.del circle{fill:var(--panel);stroke:var(--err);stroke-width:1.5}
+.del path{stroke:var(--err);stroke-width:1.8}
+.t-var .shape{fill:var(--var-f);stroke:var(--var-s)} .t-var .cap{fill:var(--var-s)}
+.t-set .shape{fill:var(--set-f);stroke:var(--set-s)} .t-set .cap{fill:var(--set-s)}
+.t-input .shape{fill:var(--in-f);stroke:var(--in-s)} .t-input .cap{fill:var(--in-s)}
+.t-output .shape{fill:var(--out-f);stroke:var(--out-s)} .t-output .cap{fill:var(--out-s)}
+.t-if .shape{fill:var(--if-f);stroke:var(--if-s)} .t-if .cap{fill:var(--if-s)}
+.t-while .shape{fill:var(--while-f);stroke:var(--while-s)} .t-while .cap{fill:var(--while-s)}
+.t-for .shape{fill:var(--for-f);stroke:var(--for-s)} .t-for .cap{fill:var(--for-s)}
+.t-term .shape{fill:var(--term-f);stroke:var(--term-s)}
+.t-term{cursor:default}
+.zone{cursor:pointer}
+.zone circle{fill:var(--panel);stroke:var(--edge);stroke-width:1.5;transition:r .1s}
+.zone path{stroke:var(--muted);stroke-width:1.8}
+.zone:hover circle{stroke:var(--accent);fill:var(--accent)}
+.zone:hover path{stroke:#fff}
+body.dragging .zone circle{stroke:var(--accent);stroke-dasharray:3 2;r:11px}
+.zone.active circle{fill:var(--accent)!important;stroke:var(--accent)!important;stroke-dasharray:none!important;r:14px!important}
+.zone.active path{stroke:#fff}
+body.dragging,body.dragging *{cursor:grabbing!important}
+#ghost{position:fixed;z-index:60;pointer-events:none;padding:8px 12px;border-radius:10px;background:var(--panel);border:2px solid var(--accent);font-weight:800;box-shadow:var(--shadow);transform:translate(-50%,-120%);display:none}
+
+/* side panels */
+.side{min-width:0;overflow:hidden;display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);min-height:0;border-left:1px solid var(--line)}
+.panel{min-width:0;display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+.panel+.panel{border-top:1px solid var(--line)}
+.panel-head{display:flex;align-items:center;gap:8px;padding:10px 12px 0;margin:0 0 6px}
+.panel-head .spacer{flex:1}
+.code-panel{background:var(--code-bg)}
+.code-panel .panel-head{color:var(--code-muted)}
+.code-panel .btn{background:transparent;border-color:#3A4056;color:var(--code-ink)}
+#code{flex:1;overflow:auto;font:400 13px/1.65 "JetBrains Mono",ui-monospace,Menlo,monospace;color:var(--code-ink);padding:4px 0 12px}
+.cl{display:flex;white-space:pre;padding-right:12px;border-left:3px solid transparent}
+.cl .ln{flex:none;width:34px;text-align:right;padding-right:12px;color:var(--code-muted);user-select:none}
+.cl.hover-link{background:rgba(255,255,255,.07)}
+.cl.running{background:var(--code-hl);border-left-color:var(--run)}
+.cl.error{background:rgba(220,38,38,.25);border-left-color:var(--err)}
+.cl[data-id]{cursor:pointer}
+.k{color:#C792EA}.b{color:#82AAFF}.s{color:#C3E88D}.n{color:#F78C6C}.c{color:var(--code-muted);font-style:italic}
+#output{flex:1;overflow:auto;padding:4px 12px 10px;font:400 13.5px/1.55 "JetBrains Mono",ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word}
+.o-sys{color:var(--muted);font-family:Nunito,system-ui,sans-serif;font-weight:700;font-size:12.5px;margin:4px 0}
+.o-ok{color:var(--ok)}
+.o-err{color:var(--err);font-weight:600}
+.o-tip{font-family:Nunito,system-ui,sans-serif;background:var(--soft);border-left:3px solid var(--run);padding:6px 10px;border-radius:6px;margin:6px 0;font-size:13px}
+.o-in input{font:inherit;border:0;border-bottom:2px solid var(--accent);background:var(--soft);outline:none;min-width:120px;padding:0 4px;color:var(--ink)}
+.o-typed{color:var(--accent);font-weight:600}
+.o-placeholder{color:var(--muted);font-family:Nunito,system-ui,sans-serif}
+#vars{border-top:1px solid var(--line);padding:8px 12px 10px;max-height:40%;overflow:auto}
+#vars table{width:100%;border-collapse:collapse;font-size:13px}
+#vars td{padding:3px 6px;border-bottom:1px solid var(--line)}
+#vars td:first-child{font-weight:800}
+#vars td.v{font-family:"JetBrains Mono",ui-monospace,monospace;word-break:break-all}
+#vars .ty{color:var(--muted);font-size:12px}
+#vars .none{color:var(--muted);font-size:12.5px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;z-index:50;background:rgba(15,18,28,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.modal-bg[hidden]{display:none}
+.modal{background:var(--panel);border-radius:16px;box-shadow:var(--shadow);width:100%;max-width:460px;max-height:calc(100vh - 32px);overflow:auto}
+.modal-head{display:flex;align-items:center;gap:10px;padding:16px 18px 4px}
+.modal-head h2{margin:0;font-size:18px}
+.modal-head svg{width:44px;height:30px}
+.modal-sub{padding:0 18px;color:var(--muted);font-size:13px}
+#mBody{padding:10px 18px 4px;display:flex;flex-direction:column;gap:14px}
+.field label{display:block;font-weight:800;font-size:13px;margin-bottom:5px}
+.field input[type=text],.field select{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--panel);font-size:15px}
+.field input.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:14px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field .hint{color:var(--muted);font-size:12.5px;margin-top:5px}
+.field .err{color:var(--err);font-size:12.5px;margin-top:5px;font-weight:700}
+.field.bad input{border-color:var(--err)}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;border:1.5px solid var(--line);background:var(--panel);border-radius:10px;padding:8px 6px;font-weight:800}
+.seg button small{display:block;font-weight:600;color:var(--muted);font-size:11.5px}
+.seg button.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--panel))}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.chip{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:2px 10px;font:600 12.5px "JetBrains Mono",ui-monospace,monospace}
+.chip.var{border-color:var(--var-s);background:var(--var-f)}
+.chip:hover{border-color:var(--accent)}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.py-preview{font:400 12.5px "JetBrains Mono",ui-monospace,monospace;background:var(--code-bg);color:var(--code-ink);padding:8px 10px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+.modal-foot{display:flex;gap:8px;padding:14px 18px 16px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:700;opacity:0;pointer-events:none;transition:.2s;z-index:70;max-width:calc(100% - 32px)}
+#toast.show{opacity:1;transform:translateX(-50%)}
+
+@media (max-width: 1100px){ main.layout{grid-template-columns:190px minmax(0,1fr) 330px} }
+@media (max-width: 860px){
+  html,body{height:auto}
+  main.layout{grid-template-columns:1fr}
+  .palette{border-right:0;border-bottom:1px solid var(--line)}
+  .pal-list{flex-direction:row;overflow-x:auto;padding-bottom:4px}
+  .pal-item{flex:none;width:170px}
+  .pal-hint{display:none}
+  .canvas-wrap{height:62vh}
+  .side{border-left:0;grid-template-rows:auto auto}
+  #code{max-height:45vh}
+  #output{min-height:140px;max-height:45vh}
+  .title-input{width:150px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="2" width="14" height="7" rx="3.5" fill="var(--term-f)" stroke="var(--term-s)" stroke-width="1.6"/><path d="M16 9v4" stroke="var(--edge)" stroke-width="1.6"/><path d="M16 13l7 5-7 5-7-5z" fill="var(--if-f)" stroke="var(--if-s)" stroke-width="1.6"/><path d="M16 23v3" stroke="var(--edge)" stroke-width="1.6"/><rect x="9" y="26" width="14" height="5" rx="2" fill="var(--out-f)" stroke="var(--out-s)" stroke-width="1.6"/></svg>
+    FlowPy
+  </div>
+  <input id="title" class="title-input" maxlength="60" aria-label="Program name" spellcheck="false">
+  <div class="menu-wrap">
+    <button class="btn" id="btnExamples">Examples ▾</button>
+    <div class="dropdown" id="exMenu" hidden>
+      <button data-ex="blank"><span><b>Start from scratch</b><small>An empty flowchart</small></span></button>
+      <button data-ex="hello"><span><b>Example 1: Say hello</b><small>Variables, input, output, a calculation</small></span></button>
+      <button data-ex="evenodd"><span><b>Example 2: Even or odd</b><small>A count loop with a decision inside</small></span></button>
+    </div>
+  </div>
+  <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
+  <button class="btn" id="btnRedo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+  <button class="btn" id="btnShare" title="Copy a link to this program">Copy link</button>
+  <span class="spacer"></span>
+  <label class="speed">Speed
+    <select id="speed">
+      <option value="700">Slow</option>
+      <option value="250" selected>Normal</option>
+      <option value="0">Instant</option>
+    </select>
+  </label>
+  <button class="btn run" id="btnRun">▶ Run</button>
+</header>
+
+<main class="layout">
+  <aside class="palette">
+    <h3>Shapes</h3>
+    <div class="pal-list" id="palette"></div>
+    <p class="pal-hint">Drag a shape onto a <b>+</b> in the flowchart, or click a <b>+</b> to pick one. Click any shape to edit it. Drag shapes to move them.</p>
+  </aside>
+
+  <section class="canvas-wrap">
+    <div id="canvas"><svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="empty-hint" id="emptyHint" hidden>
+      <b>Your flowchart is empty.</b><br>Drag a shape from the left onto the <b>+</b>, or try an example:
+      <div class="row"><button class="btn small" data-ex="hello">Say hello</button><button class="btn small" data-ex="evenodd">Even or odd</button></div>
+    </div>
+    <div class="zoom"><button id="zOut" title="Zoom out">−</button><button id="zReset" title="Reset zoom">100%</button><button id="zIn" title="Zoom in">+</button></div>
+  </section>
+
+  <section class="side">
+    <div class="panel code-panel">
+      <div class="panel-head">Python code <span class="spacer"></span><button class="btn small" id="btnCopyCode">Copy</button></div>
+      <div id="code"></div>
+    </div>
+    <div class="panel out-panel">
+      <div class="panel-head">Output <span class="spacer"></span><button class="btn small" id="btnClear">Clear</button></div>
+      <div id="output"><div class="o-placeholder">Press ▶ Run to start your program.</div></div>
+      <div id="vars"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-bg" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="modal-head"><span id="mIcon"></span><h2 id="mTitle"></h2></div>
+    <div class="modal-sub" id="mSub"></div>
+    <div id="mBody"></div>
+    <div class="modal-foot">
+      <button class="btn danger" id="mDelete">Delete</button>
+      <span class="spacer"></span>
+      <button class="btn" id="mCancel">Cancel</button>
+      <button class="btn primary" id="mSave">Done</button>
+    </div>
+  </div>
+</div>
+<div class="dropdown" id="plusMenu" hidden style="position:fixed"></div>
+<div id="ghost"></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ============================================================
+   Block types
+   ============================================================ */
+const TYPES = {
+  var:    {label:'Variable',   cap:'VARIABLE', desc:'A box that stores text or a number'},
+  input:  {label:'Input',      cap:'INPUT',    desc:'Ask the user to type something'},
+  output: {label:'Output',     cap:'OUTPUT',   desc:'Show something on the screen'},
+  set:    {label:'Set value',  cap:'SET',      desc:"Change a variable's value"},
+  if:     {label:'Decision',   cap:'IF',       desc:'Choose a path: Yes or No'},
+  while:  {label:'Loop while', cap:'WHILE',    desc:'Repeat while something is true'},
+  for:    {label:'Count loop', cap:'COUNT',    desc:'Count from one number to another'},
+};
+const VTYPES = {text:'Text', int:'Number', float:'Decimal'};
+const CHILD_KEYS = {if:['yes','no'], while:['body'], for:['body']};
+const PY_KEYWORDS = new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+const RESERVED = new Set([...PY_KEYWORDS, 'print','input','int','float','str','len','round','abs','min','max','range','type','list','bool','sum']);
+
+let uid = 1;
+const newId = () => 'b' + (uid++);
+
+function makeBlock(t){
+  const b = {id:newId(), t};
+  if (t === 'var') Object.assign(b, {name:'', vtype:'text', value:''});
+  if (t === 'input') Object.assign(b, {name:'', prompt:''});
+  if (t === 'output') b.expr = '';
+  if (t === 'set') Object.assign(b, {name:'', expr:''});
+  if (t === 'if') Object.assign(b, {cond:'', yes:[], no:[]});
+  if (t === 'while') Object.assign(b, {cond:'', body:[]});
+  if (t === 'for') Object.assign(b, {name:'i', from:'1', to:'10', step:'1', body:[]});
+  return b;
+}
+
+/* ============================================================
+   State, tree helpers, undo
+   ============================================================ */
+let state = {title:'My program', body:[]};
+
+function walk(list, fn){
+  list.forEach((b, i) => { fn(b, list, i); (CHILD_KEYS[b.t] || []).forEach(k => walk(b[k], fn)); });
+}
+function findBlock(id){
+  let r = null;
+  walk(state.body, (b, list, i) => { if (b.id === id) r = {b, list, i}; });
+  return r;
+}
+function getList(owner, key){
+  if (owner === 'root') return state.body;
+  const f = findBlock(owner);
+  return f ? f.b[key] : null;
+}
+function contains(block, id){
+  let found = false;
+  walk([block], b => { if (b.id === id) found = true; });
+  return found;
+}
+// name -> vtype, for every variable the program creates (Variable blocks and count-loop counters)
+function knownVars(){
+  const m = new Map();
+  walk(state.body, b => {
+    if (b.t === 'var' && b.name && !m.has(b.name)) m.set(b.name, b.vtype);
+    if (b.t === 'for' && b.name && !m.has(b.name)) m.set(b.name, 'int');
+  });
+  return m;
+}
+
+function strip(list){
+  return list.map(b => {
+    const o = {};
+    for (const k in b){ if (k !== 'id') o[k] = Array.isArray(b[k]) ? strip(b[k]) : b[k]; }
+    return o;
+  });
+}
+function hydrate(list){
+  if (!Array.isArray(list)) return [];
+  return list.filter(o => o && TYPES[o.t]).map(o => {
+    const b = makeBlock(o.t);
+    for (const k in b){
+      if (k === 'id' || k === 't') continue;
+      if (Array.isArray(b[k])) b[k] = hydrate(o[k]);
+      else if (typeof o[k] === 'string') b[k] = o[k];
+    }
+    if (b.t === 'var' && !VTYPES[b.vtype]) b.vtype = 'text';
+    return b;
+  });
+}
+const serialize = () => ({v:1, title:state.title, body:strip(state.body)});
+function loadData(d){
+  state = {title: (d && typeof d.title === 'string') ? d.title : 'My program', body: hydrate(d && d.body)};
+}
+
+const undoStack = [], redoStack = [];
+function commit(mutate){
+  undoStack.push(JSON.stringify(serialize()));
+  if (undoStack.length > 150) undoStack.shift();
+  redoStack.length = 0;
+  mutate();
+  afterChange();
+}
+function undo(){
+  if (!undoStack.length || run) return;
+  redoStack.push(JSON.stringify(serialize()));
+  loadData(JSON.parse(undoStack.pop()));
+  afterChange();
+}
+function redo(){
+  if (!redoStack.length || run) return;
+  undoStack.push(JSON.stringify(serialize()));
+  loadData(JSON.parse(redoStack.pop()));
+  afterChange();
+}
+function afterChange(){
+  $('#title').value = state.title;
+  render();
+  scheduleSave();
+  $('#btnUndo').disabled = !undoStack.length;
+  $('#btnRedo').disabled = !redoStack.length;
+}
+
+/* ============================================================
+   URL saving (compressed into ?p=)
+   ============================================================ */
+function b64u(bytes){
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function unb64u(str){
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  const s = atob(str), b = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+async function encodeState(){
+  const bytes = new TextEncoder().encode(JSON.stringify(serialize()));
+  if ('CompressionStream' in window){
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+    return 'z' + b64u(new Uint8Array(await new Response(stream).arrayBuffer()));
+  }
+  return 'j' + b64u(bytes);
+}
+async function decodeState(p){
+  let data = unb64u(p.slice(1));
+  if (p[0] === 'z'){
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    data = new Uint8Array(await new Response(stream).arrayBuffer());
+  } else if (p[0] !== 'j') throw new Error('Unknown link format');
+  return JSON.parse(new TextDecoder().decode(data));
+}
+let saveTimer;
+function scheduleSave(){ clearTimeout(saveTimer); saveTimer = setTimeout(saveToUrl, 250); }
+async function saveToUrl(){
+  try {
+    const url = new URL(location.href);
+    if (!state.body.length && state.title === 'My program') url.searchParams.delete('p');
+    else url.searchParams.set('p', await encodeState());
+    history.replaceState(null, '', url);
+  } catch (e) { /* e.g. file:// restrictions — the share button still works */ }
+}
+
+/* ============================================================
+   Expression language: a small, honest subset of Python
+   ============================================================ */
+class PyError extends Error {
+  constructor(type, msg, tip){ super(msg); this.type = type; this.tip = tip || ''; }
+}
+const I = v => ({t:'int', v}), F = v => ({t:'float', v}), S = v => ({t:'str', v}), B = v => ({t:'bool', v});
+const isNum = x => x.t === 'int' || x.t === 'float' || x.t === 'bool';
+const num = x => x.t === 'bool' ? (x.v ? 1 : 0) : x.v;
+const FRIENDLY = {str:'text', int:'whole number', float:'decimal number', bool:'True/False value'};
+
+function normalizeQuotes(s){ return s.replace(/[“”„‟]/g, '"').replace(/[‘’‚‛]/g, "'"); }
+
+function tokenize(src){
+  const toks = [];
+  let i = 0;
+  while (i < src.length){
+    const c = src[i];
+    if (/\s/.test(c)){ i++; continue; }
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(src[i+1] || ''))){
+      const t = /^(\d[\d_]*\.?[\d_]*|\.\d[\d_]*)([eE][+-]?\d+)?/.exec(src.slice(i))[0];
+      const clean = t.replace(/_/g, '');
+      toks.push({k:'lit', v: /[.eE]/.test(t) ? F(parseFloat(clean)) : I(parseInt(clean, 10))});
+      i += t.length;
+      if (/[A-Za-z_]/.test(src[i] || '')) throw new PyError('SyntaxError', 'invalid syntax', 'A name can\'t start with a digit, and a number can\'t have letters in it.');
+      continue;
+    }
+    if (c === '"' || c === "'"){
+      let j = i + 1, s = '';
+      while (j < src.length && src[j] !== c){
+        if (src[j] === '\\' && j + 1 < src.length){
+          const n = src[j+1];
+          s += n === 'n' ? '\n' : n === 't' ? '\t' : (n === '\\' || n === '"' || n === "'") ? n : '\\' + n;
+          j += 2;
+        } else s += src[j++];
+      }
+      if (j >= src.length) throw new PyError('SyntaxError', 'unterminated string literal', 'A closing quote is missing. Text must start and end with the same quote mark, "like this".');
+      toks.push({k:'lit', v:S(s)});
+      i = j + 1;
+      continue;
+    }
+    if (/[A-Za-z_]/.test(c)){
+      const w = /^[A-Za-z_]\w*/.exec(src.slice(i))[0];
+      if (w === 'and' || w === 'or' || w === 'not') toks.push({k:'op', v:w});
+      else if (w === 'True' || w === 'False') toks.push({k:'lit', v:B(w === 'True')});
+      else if (w === 'true' || w === 'false') throw new PyError('NameError', `name '${w}' is not defined`, `In Python, True and False start with a capital letter.`);
+      else if (PY_KEYWORDS.has(w)) throw new PyError('SyntaxError', 'invalid syntax', `"${w}" is a special Python word and can't be used here.`);
+      else toks.push({k:'name', v:w});
+      i += w.length;
+      continue;
+    }
+    const two = src.substr(i, 2);
+    if (['**', '//', '==', '!=', '<=', '>='].includes(two)){ toks.push({k:'op', v:two}); i += 2; continue; }
+    if ('+-*/%<>(),'.includes(c)){ toks.push({k:'op', v:c}); i++; continue; }
+    if (c === '=') throw new PyError('SyntaxError', 'invalid syntax', 'To check if two things are equal, use == (two equal signs).');
+    throw new PyError('SyntaxError', `invalid character '${c}'`, `The character ${c} can't be used here. Put words inside quotes, "like this".`);
+  }
+  return toks;
+}
+
+// returns a list of expression trees (more than one only when allowArgs, for Output)
+function parse(src, allowArgs){
+  const toks = tokenize(src);
+  let p = 0;
+  const isOp = v => toks[p] && toks[p].k === 'op' && toks[p].v === v;
+  const syn = tip => new PyError('SyntaxError', 'invalid syntax', tip);
+  const CMP = new Set(['==', '!=', '<', '>', '<=', '>=']);
+  function expect(v){ if (!isOp(v)) throw syn(`Something is missing — expected "${v}". Check your brackets.`); p++; }
+  function orE(){ let a = andE(); while (isOp('or')){ p++; a = {k:'or', a, b:andE()}; } return a; }
+  function andE(){ let a = notE(); while (isOp('and')){ p++; a = {k:'and', a, b:notE()}; } return a; }
+  function notE(){ if (isOp('not')){ p++; return {k:'not', a:notE()}; } return cmpE(); }
+  function cmpE(){
+    const items = [addE()], ops = [];
+    while (toks[p] && toks[p].k === 'op' && CMP.has(toks[p].v)){ ops.push(toks[p++].v); items.push(addE()); }
+    return ops.length ? {k:'cmp', ops, items} : items[0];
+  }
+  function addE(){ let a = mulE(); while (isOp('+') || isOp('-')){ const op = toks[p++].v; a = {k:'bin', op, a, b:mulE()}; } return a; }
+  function mulE(){ let a = unE(); while (isOp('*') || isOp('/') || isOp('//') || isOp('%')){ const op = toks[p++].v; a = {k:'bin', op, a, b:unE()}; } return a; }
+  function unE(){
+    if (isOp('-')){ p++; return {k:'neg', a:unE()}; }
+    if (isOp('+')){ p++; return {k:'pos', a:unE()}; }
+    return powE();
+  }
+  function powE(){ const a = atom(); if (isOp('**')){ p++; return {k:'bin', op:'**', a, b:unE()}; } return a; }
+  function atom(){
+    const t = toks[p++];
+    if (!t) throw syn('Something is missing at the end.');
+    if (t.k === 'lit') return {k:'lit', v:t.v};
+    if (t.k === 'name'){
+      if (isOp('(')){
+        p++;
+        const args = [];
+        if (!isOp(')')){ args.push(orE()); while (isOp(',')){ p++; args.push(orE()); } }
+        expect(')');
+        return {k:'call', f:t.v, args};
+      }
+      return {k:'name', n:t.v};
+    }
+    if (t.k === 'op' && t.v === '('){ const e = orE(); expect(')'); return e; }
+    throw syn(`"${t.v}" is in an unexpected place.`);
+  }
+  if (!toks.length){
+    if (allowArgs) return [];
+    throw new PyError('SyntaxError', 'invalid syntax', 'This is empty — type something here.');
+  }
+  const items = [orE()];
+  while (allowArgs && isOp(',')){ p++; items.push(orE()); }
+  if (p < toks.length){
+    if (isOp(',')) throw syn('Commas can only be used in an Output block.');
+    throw syn('Did you forget a + or a comma between two pieces?');
+  }
+  return items;
+}
+
+const parseCache = new Map();
+function parseCached(src, allowArgs){
+  const key = (allowArgs ? 'A' : 'E') + src;
+  if (!parseCache.has(key)){
+    try { parseCache.set(key, {ok:parse(src, allowArgs)}); }
+    catch (e){ parseCache.set(key, {err:e}); }
+  }
+  const r = parseCache.get(key);
+  if (r.err) throw r.err;
+  return r.ok;
+}
+
+function floatRepr(v){
+  if (Number.isNaN(v)) return 'nan';
+  if (v === Infinity) return 'inf';
+  if (v === -Infinity) return '-inf';
+  if (Number.isInteger(v) && Math.abs(v) < 1e16) return (Object.is(v, -0) ? '-0' : String(v)) + '.0';
+  let s = (Math.abs(v) >= 1e16 || (v !== 0 && Math.abs(v) < 1e-4)) ? v.toExponential() : String(v);
+  return s.replace(/e([+-])(\d)$/, 'e$10$2');
+}
+function pyStr(x){
+  if (x.t === 'str') return x.v;
+  if (x.t === 'float') return floatRepr(x.v);
+  if (x.t === 'bool') return x.v ? 'True' : 'False';
+  return String(x.v);
+}
+function pyRepr(x){
+  if (x.t !== 'str') return pyStr(x);
+  const q = (x.v.includes("'") && !x.v.includes('"')) ? '"' : "'";
+  return q + x.v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\t/g, '\\t').split(q).join('\\' + q) + q;
+}
+const truthy = x => x.t === 'str' ? x.v.length > 0 : num(x) !== 0;
+
+function binop(op, a, b){
+  if (isNum(a) && isNum(b)){
+    const fl = a.t === 'float' || b.t === 'float', x = num(a), y = num(b);
+    const mk = v => fl ? F(v) : I(v);
+    const zero = () => new PyError('ZeroDivisionError', 'division by zero', 'You can\'t divide by zero. Check the number after / // or %.');
+    switch (op){
+      case '+': return mk(x + y);
+      case '-': return mk(x - y);
+      case '*': return mk(x * y);
+      case '/': if (y === 0) throw zero(); return F(x / y);
+      case '//': if (y === 0) throw zero(); return mk(Math.floor(x / y));
+      case '%': if (y === 0) throw zero(); return mk(x - y * Math.floor(x / y));
+      case '**':
+        if (x === 0 && y < 0) throw zero();
+        return (!fl && y < 0) ? F(Math.pow(x, y)) : mk(Math.pow(x, y));
+    }
+  }
+  if (op === '+' && a.t === 'str' && b.t === 'str') return S(a.v + b.v);
+  if (op === '*'){
+    if (a.t === 'str' && (b.t === 'int' || b.t === 'bool')) return S(a.v.repeat(Math.max(0, num(b))));
+    if (b.t === 'str' && (a.t === 'int' || a.t === 'bool')) return S(b.v.repeat(Math.max(0, num(a))));
+  }
+  if (op === '+' && a.t === 'str')
+    throw new PyError('TypeError', `can only concatenate str (not "${b.t}") to str`,
+      `You tried to join text with a ${FRIENDLY[b.t]} using +. Turn the number into text first with str(...), for example "Age: " + str(age). Or in an Output, use a comma instead: "Age:", age`);
+  const tip = (a.t === 'str' || b.t === 'str')
+    ? `You can't do maths with text. If the text holds a number, turn it into one with int(...) or float(...).`
+    : '';
+  throw new PyError('TypeError', `unsupported operand type(s) for ${op}: '${a.t}' and '${b.t}'`, tip);
+}
+function compare(op, a, b){
+  if (op === '==' || op === '!='){
+    let eq;
+    if (isNum(a) && isNum(b)) eq = num(a) === num(b);
+    else if (a.t === 'str' && b.t === 'str') eq = a.v === b.v;
+    else eq = false;
+    return op === '==' ? eq : !eq;
+  }
+  let x, y;
+  if (isNum(a) && isNum(b)){ x = num(a); y = num(b); }
+  else if (a.t === 'str' && b.t === 'str'){ x = a.v; y = b.v; }
+  else throw new PyError('TypeError', `'${op}' not supported between instances of '${a.t}' and '${b.t}'`,
+    `You can't compare text with a number using ${op}. If the text holds a number, make it a number with int(...).`);
+  return op === '<' ? x < y : op === '>' ? x > y : op === '<=' ? x <= y : x >= y;
+}
+function roundHalfEven(x){
+  const f = Math.floor(x), d = x - f;
+  if (d > 0.5) return f + 1;
+  if (d < 0.5) return f;
+  return f % 2 === 0 ? f : f + 1;
+}
+function needArgs(name, args, min, max){
+  if (args.length < min || args.length > max){
+    const want = min === max ? `${min}` : `${min} to ${max}`;
+    throw new PyError('TypeError', `${name}() takes ${want} argument${max > 1 ? 's' : ''} (${args.length} given)`, `${name}(...) needs ${want} value${max > 1 ? 's' : ''} inside the brackets.`);
+  }
+}
+function needNum(name, x){
+  if (!isNum(x)) throw new PyError('TypeError', `bad operand type for ${name}(): '${x.t}'`, `${name}(...) only works with numbers.`);
+}
+const BUILTINS = {
+  str(a){ needArgs('str', a, 1, 1); return S(pyStr(a[0])); },
+  int(a){
+    needArgs('int', a, 1, 1);
+    const x = a[0];
+    if (x.t === 'str'){
+      const s = x.v.trim();
+      if (!/^[+-]?\d+$/.test(s)) throw new PyError('ValueError', `invalid literal for int() with base 10: ${pyRepr(x)}`, `int(...) can only turn text into a whole number if it looks like one, e.g. "42".`);
+      return I(parseInt(s, 10));
+    }
+    if (x.t === 'float'){
+      if (!isFinite(x.v)) throw new PyError('OverflowError', 'cannot convert float infinity to integer');
+      return I(Math.trunc(x.v));
+    }
+    return I(num(x));
+  },
+  float(a){
+    needArgs('float', a, 1, 1);
+    const x = a[0];
+    if (x.t === 'str'){
+      const s = x.v.trim().toLowerCase();
+      if (/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(s)) return F(parseFloat(s));
+      if (/^[+-]?(inf|infinity)$/.test(s)) return F(s[0] === '-' ? -Infinity : Infinity);
+      if (/^[+-]?nan$/.test(s)) return F(NaN);
+      throw new PyError('ValueError', `could not convert string to float: ${pyRepr(x)}`, `float(...) can only turn text into a number if it looks like one, e.g. "3.5".`);
+    }
+    return F(num(x));
+  },
+  round(a){
+    needArgs('round', a, 1, 2);
+    needNum('round', a[0]);
+    if (a.length === 1) return I(roundHalfEven(num(a[0])));
+    const d = num(a[1]), m = Math.pow(10, d);
+    if (a[0].t !== 'float') return I(roundHalfEven(num(a[0]) * m) / m);
+    return F(Math.round(a[0].v * m) / m);
+  },
+  len(a){
+    needArgs('len', a, 1, 1);
+    if (a[0].t !== 'str') throw new PyError('TypeError', `object of type '${a[0].t}' has no len()`, 'len(...) counts the letters in a piece of text.');
+    return I(Array.from(a[0].v).length);
+  },
+  abs(a){ needArgs('abs', a, 1, 1); needNum('abs', a[0]); return a[0].t === 'float' ? F(Math.abs(a[0].v)) : I(Math.abs(num(a[0]))); },
+  min(a){ return pick('min', a, (x, y) => compare('<', y, x)); },
+  max(a){ return pick('max', a, (x, y) => compare('>', y, x)); },
+};
+function pick(name, a, better){
+  if (a.length < 2) throw new PyError('TypeError', `${name}() needs at least 2 values here`, `${name}(...) needs two or more values, e.g. ${name}(a, b).`);
+  let r = a[0];
+  for (const x of a.slice(1)) if (better(r, x)) r = x;
+  return r;
+}
+
+function evalNode(n, env){
+  switch (n.k){
+    case 'lit': return n.v;
+    case 'name':
+      if (env.has(n.n)) return env.get(n.n);
+      throw new PyError('NameError', `name '${n.n}' is not defined`, nameTip(n.n));
+    case 'bin': return binop(n.op, evalNode(n.a, env), evalNode(n.b, env));
+    case 'neg': case 'pos': {
+      const a = evalNode(n.a, env);
+      if (!isNum(a)) throw new PyError('TypeError', `bad operand type for unary ${n.k === 'neg' ? '-' : '+'}: '${a.t}'`);
+      const v = n.k === 'neg' ? -num(a) : num(a);
+      return a.t === 'float' ? F(v) : I(v);
+    }
+    case 'not': return B(!truthy(evalNode(n.a, env)));
+    case 'and': { const a = evalNode(n.a, env); return truthy(a) ? evalNode(n.b, env) : a; }
+    case 'or': { const a = evalNode(n.a, env); return truthy(a) ? a : evalNode(n.b, env); }
+    case 'cmp': {
+      let left = evalNode(n.items[0], env);
+      for (let i = 0; i < n.ops.length; i++){
+        const right = evalNode(n.items[i+1], env);
+        if (!compare(n.ops[i], left, right)) return B(false);
+        left = right;
+      }
+      return B(true);
+    }
+    case 'call': {
+      if (n.f === 'print') throw new PyError('SyntaxError', 'print() is not allowed here', 'Use an Output shape to show things on screen.');
+      if (n.f === 'input') throw new PyError('SyntaxError', 'input() is not allowed here', 'Use an Input shape to ask the user something.');
+      const fn = BUILTINS[n.f];
+      if (!fn) throw new PyError('NameError', `name '${n.f}' is not defined`, `FlowPy knows these helpers: ${Object.keys(BUILTINS).join(', ')}.`);
+      return fn(n.args.map(a => evalNode(a, env)));
+    }
+  }
+}
+function nameTip(name){
+  return `There is no variable called "${name}" yet. Add a Variable shape before this one to create it (names are case-sensitive). If you meant the word itself, put it in quotes: "${name}"`;
+}
+// names and functions an expression uses — for checking in the editor
+function collectNames(n, out){
+  if (!n) return out;
+  if (n.k === 'name') out.names.add(n.n);
+  if (n.k === 'call'){ out.calls.add(n.f); n.args.forEach(a => collectNames(a, out)); }
+  ['a', 'b'].forEach(k => n[k] && collectNames(n[k], out));
+  if (n.items) n.items.forEach(a => collectNames(a, out));
+  return out;
+}
+
+/* ============================================================
+   Python code generation
+   ============================================================ */
+const pyQuote = s => JSON.stringify(s);
+const promptText = b => (b.prompt && !/\s$/.test(b.prompt)) ? b.prompt + ' ' : b.prompt;
+function literalPy(b){
+  if (b.vtype === 'text') return pyQuote(b.value);
+  if (b.vtype === 'int') return b.value.trim() ? String(parseInt(b.value, 10)) : '0';
+  const v = b.value.trim();
+  if (!v) return '0.0';
+  return /[.eE]/.test(v) ? v.replace(/^\+/, '') : v.replace(/^\+/, '') + '.0';
+}
+function literalValue(b){
+  if (b.vtype === 'text') return S(b.value);
+  if (b.vtype === 'int') return I(b.value.trim() ? parseInt(b.value, 10) : 0);
+  return F(b.value.trim() ? parseFloat(b.value) : 0);
+}
+function rangePy(b){
+  const step = parseInt(b.step, 10) || 1;
+  const from = b.from.trim(), to = b.to.trim();
+  let stop;
+  if (/^[+-]?\d+$/.test(to)) stop = String(parseInt(to, 10) + (step > 0 ? 1 : -1));
+  else stop = `${to} ${step > 0 ? '+' : '-'} 1`;
+  return step === 1 ? `range(${from}, ${stop})` : `range(${from}, ${stop}, ${step})`;
+}
+function genPython(){
+  const lines = [], vars = knownVars();
+  const emit = (ind, text, id, main = true) => lines.push({text:'    '.repeat(ind) + text, id, main});
+  function seq(list, ind, ownerId){
+    if (!list.length){ emit(ind, 'pass', ownerId, false); return; }
+    list.forEach(b => blk(b, ind));
+  }
+  function blk(b, ind){
+    switch (b.t){
+      case 'var': emit(ind, `${b.name || '?'} = ${literalPy(b)}`, b.id); break;
+      case 'input': {
+        const p = b.prompt ? `input(${pyQuote(promptText(b))})` : 'input()';
+        const vt = vars.get(b.name);
+        emit(ind, `${b.name || '?'} = ${vt === 'int' ? `int(${p})` : vt === 'float' ? `float(${p})` : p}`, b.id);
+        break;
+      }
+      case 'output': emit(ind, `print(${b.expr})`, b.id); break;
+      case 'set': emit(ind, `${b.name || '?'} = ${b.expr}`, b.id); break;
+      case 'if':
+        emit(ind, `if ${b.cond}:`, b.id);
+        seq(b.yes, ind + 1, b.id);
+        if (b.no.length){ emit(ind, 'else:', b.id, false); seq(b.no, ind + 1, b.id); }
+        break;
+      case 'while': emit(ind, `while ${b.cond}:`, b.id); seq(b.body, ind + 1, b.id); break;
+      case 'for': {
+        const note = /^[+-]?\d+$/.test(b.to.trim()) ? `  # ${b.from} to ${b.to}` : '';
+        emit(ind, `for ${b.name} in ${rangePy(b)}:${note}`, b.id);
+        seq(b.body, ind + 1, b.id);
+        break;
+      }
+    }
+  }
+  state.body.forEach(b => blk(b, 0));
+  return lines;
+}
+
+const PY_HL = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(if|else|while|for|in|and|or|not|True|False|pass)\b|\b(print|input|int|float|str|range|len|round|abs|min|max)\b|\b(\d+(?:\.\d+)?)\b/g;
+function highlightPy(text){
+  let out = '', last = 0, m;
+  PY_HL.lastIndex = 0;
+  while ((m = PY_HL.exec(text))){
+    out += esc(text.slice(last, m.index));
+    const cls = m[1] ? 'c' : m[2] ? 's' : m[3] ? 'k' : m[4] ? 'b' : 'n';
+    out += `<span class="${cls}">${esc(m[0])}</span>`;
+    last = m.index + m[0].length;
+  }
+  return out + esc(text.slice(last));
+}
+function renderCode(){
+  const lines = genPython();
+  const el = $('#code');
+  if (!lines.length){
+    el.innerHTML = `<div class="cl"><span class="ln">1</span><span class="c"># Add shapes to your flowchart and</span></div><div class="cl"><span class="ln">2</span><span class="c"># the Python code will appear here.</span></div>`;
+    return;
+  }
+  el.innerHTML = lines.map((l, i) =>
+    `<div class="cl${l.main ? ' main' : ''}" data-id="${l.id}"><span class="ln">${i + 1}</span><span>${highlightPy(l.text)}</span></div>`).join('');
+}
+
+/* ============================================================
+   Flowchart layout + SVG rendering
+   ============================================================ */
+const NODE_H = 50, DIA_H = 68, GAP = 42, MAXLABEL = 34, TERM_W = 110, TERM_H = 40;
+const mctx = document.createElement('canvas').getContext('2d');
+function textW(s){ mctx.font = '700 13px Nunito, system-ui, sans-serif'; return mctx.measureText(s).width; }
+const short = s => s.length > MAXLABEL ? s.slice(0, MAXLABEL - 1) + '…' : s;
+
+function labelOf(b){
+  switch (b.t){
+    case 'var': {
+      if (!b.name) return '';
+      const v = b.value.trim() === '' ? '' : ' = ' + (b.vtype === 'text' ? pyQuote(b.value) : b.value.trim());
+      return `${b.name} (${VTYPES[b.vtype]})${v}`;
+    }
+    case 'input': return b.name ? `ask → ${b.name}` : '';
+    case 'output': return b.expr;
+    case 'set': return b.name ? `${b.name} = ${b.expr}` : '';
+    case 'if': case 'while': return b.cond ? b.cond + ' ?' : '';
+    case 'for': return b.name ? `${b.name} = ${b.from} to ${b.to}` + ((parseInt(b.step, 10) || 1) !== 1 ? `, step ${b.step}` : '') : '';
+  }
+  return '';
+}
+const PADS = {var:40, set:36, input:60, output:60, if:84, while:84, for:64};
+function nodeW(b){
+  const t = short(labelOf(b) || 'click to edit');
+  const min = (b.t === 'if' || b.t === 'while') ? 160 : 140;
+  return Math.max(min, Math.ceil(textW(t) + PADS[b.t]));
+}
+
+let mcache = new Map();
+function mSeq(list){
+  let l = 14, r = 14, h = GAP;
+  for (const b of list){ const m = mBlock(b); l = Math.max(l, m.l); r = Math.max(r, m.r); h += m.h + GAP; }
+  return {l, r, h};
+}
+function mBlock(b){
+  if (mcache.has(b.id)) return mcache.get(b.id);
+  const w = nodeW(b);
+  let m;
+  if (b.t === 'if'){
+    const ym = mSeq(b.yes), nm = mSeq(b.no);
+    const dxY = Math.max(w / 2 + 26, ym.l + 28), dxN = Math.max(w / 2 + 26, nm.r + 28);
+    m = {w, dxY, dxN, ym, nm, l:dxN + nm.l, r:dxY + ym.r, h:DIA_H / 2 + Math.max(ym.h, nm.h) + 16};
+  } else if (b.t === 'while' || b.t === 'for'){
+    const bm = mSeq(b.body);
+    const lx = Math.max(w / 2, bm.l) + 30, rx = Math.max(w / 2, bm.r) + 30;
+    m = {w, bm, lx, rx, l:lx + 8, r:rx + 8, h:DIA_H + bm.h + 20};
+  } else m = {w, l:w / 2 + 8, r:w / 2 + 8, h:NODE_H};
+  mcache.set(b.id, m);
+  return m;
+}
+
+function shapeSvg(t, cx, y, w, h){
+  const x0 = cx - w / 2;
+  switch (t){
+    case 'term': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/>`;
+    case 'var': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="shape" style="fill:none" d="M${x0 + 9} ${y}V${y + h}M${x0} ${y + 9}H${x0 + w}"/>`;
+    case 'set': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="4"/>`;
+    case 'input': case 'output': return `<path class="shape" d="M${x0 + 16} ${y}H${x0 + w}L${x0 + w - 16} ${y + h}H${x0}Z"/>`;
+    case 'if': case 'while': return `<path class="shape" d="M${cx} ${y}L${x0 + w} ${y + h / 2}L${cx} ${y + h}L${x0} ${y + h / 2}Z"/>`;
+    case 'for': return `<path class="shape" d="M${x0 + 18} ${y}H${x0 + w - 18}L${x0 + w} ${y + h / 2}L${x0 + w - 18} ${y + h}H${x0 + 18}L${x0} ${y + h / 2}Z"/>`;
+  }
+}
+
+function render(){
+  mcache = new Map();
+  parseCache.clear();
+  const edges = [], nodes = [], zones = [];
+  const line = (pts, arrow) => edges.push(`<path class="edge" d="M${pts.map(p => p.join(' ')).join('L')}"${arrow ? ' marker-end="url(#arr)"' : ''}/>`);
+  const label = (x, y, text, anchor = 'start') => edges.push(`<text class="lbl" x="${x}" y="${y}" text-anchor="${anchor}">${text}</text>`);
+  const zone = (x, y, owner, key, i) => zones.push(`<g class="zone" data-owner="${owner}" data-key="${key}" data-i="${i}" transform="translate(${x} ${y})"><circle r="9"/><path d="M-4 0H4M0 -4V4"/></g>`);
+
+  function node(b, cx, y, w, h){
+    const lab = labelOf(b);
+    const full = lab || 'click to edit';
+    const isDia = b.t === 'if' || b.t === 'while' || b.t === 'for';
+    const x0 = cx - w / 2;
+    const delX = isDia ? cx + w / 2 - 22 : x0 + w - 4, delY = isDia ? y + h / 2 - 16 : y + 4;
+    nodes.push(`<g class="node t-${b.t}" data-id="${b.id}"><title>${esc(TYPES[b.t].label + ': ' + full)}</title>${shapeSvg(b.t, cx, y, w, h)}
+      <text class="cap" x="${cx}" y="${y + h / 2 - 7}">${TYPES[b.t].cap}</text>
+      <text class="txt${lab ? '' : ' ph'}" x="${cx}" y="${y + h / 2 + 11}">${esc(short(full))}</text>
+      <g class="del" data-del="${b.id}" transform="translate(${delX} ${delY})"><title>Delete</title><circle r="8"/><path d="M-3 -3L3 3M3 -3L-3 3"/></g></g>`);
+  }
+
+  function dSeq(list, cx, y, owner, key, arrowEnd){
+    for (let i = 0; i <= list.length; i++){
+      const last = i === list.length;
+      line([[cx, y], [cx, y + GAP]], !last || arrowEnd);
+      zone(cx, y + GAP / 2 - 2, owner, key, i);
+      y += GAP;
+      if (!last){ const b = list[i]; dBlock(b, mBlock(b), cx, y); y += mBlock(b).h; }
+    }
+    return y;
+  }
+
+  function dBlock(b, m, cx, y){
+    if (b.t === 'if'){
+      const my = y + DIA_H / 2, xY = cx + m.dxY, xN = cx - m.dxN;
+      const bottom = my + Math.max(m.ym.h, m.nm.h);
+      line([[cx + m.w / 2, my], [xY, my]]);
+      line([[cx - m.w / 2, my], [xN, my]]);
+      label(cx + m.w / 2 + 6, my - 6, 'Yes');
+      label(cx - m.w / 2 - 6, my - 6, 'No', 'end');
+      const endY = dSeq(b.yes, xY, my, b.id, 'yes', false);
+      const endN = dSeq(b.no, xN, my, b.id, 'no', false);
+      line([[xY, endY], [xY, bottom], [cx, bottom]]);
+      line([[xN, endN], [xN, bottom], [cx, bottom]]);
+      line([[cx, bottom], [cx, y + m.h]]);
+      edges.push(`<circle cx="${cx}" cy="${bottom}" r="4" fill="var(--edge)"/>`);
+      node(b, cx, y, m.w, DIA_H);
+    } else if (b.t === 'while' || b.t === 'for'){
+      const my = y + DIA_H / 2;
+      const endY = dSeq(b.body, cx, y + DIA_H, b.id, 'body', false);
+      const out = y + m.h;
+      line([[cx, endY], [cx - m.lx, endY], [cx - m.lx, my], [cx - m.w / 2, my]], true);
+      line([[cx + m.w / 2, my], [cx + m.rx, my], [cx + m.rx, out], [cx, out]]);
+      label(cx + 8, y + DIA_H + 14, b.t === 'for' ? 'Next' : 'Yes');
+      label(cx + m.w / 2 + 6, my - 6, b.t === 'for' ? 'Done' : 'No');
+      node(b, cx, y, m.w, DIA_H);
+    } else node(b, cx, y, m.w, NODE_H);
+  }
+
+  const top = 24;
+  nodes.push(`<g class="node t-term" data-id="start">${shapeSvg('term', 0, top, TERM_W, TERM_H)}<text class="txt" x="0" y="${top + 25}">Start</text></g>`);
+  const endY = dSeq(state.body, 0, top + TERM_H, 'root', 'body', true);
+  nodes.push(`<g class="node t-term" data-id="end">${shapeSvg('term', 0, endY, TERM_W, TERM_H)}<text class="txt" x="0" y="${endY + 25}">End</text></g>`);
+
+  const m = mSeq(state.body);
+  const host = $('#canvas');
+  const half = Math.max(m.l, m.r, TERM_W / 2) + 40;
+  const W = Math.max(half * 2, host.clientWidth / zoom), H = endY + TERM_H + 60;
+  const svg = $('#chart');
+  svg.setAttribute('viewBox', `${-W / 2} 0 ${W} ${H}`);
+  svg.setAttribute('width', W * zoom);
+  svg.setAttribute('height', H * zoom);
+  svg.innerHTML = `<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L9 5L0 9z" fill="var(--edge)"/></marker></defs>
+    <g>${edges.join('')}</g><g>${nodes.join('')}</g><g>${zones.join('')}</g>`;
+  $('#emptyHint').hidden = state.body.length > 0;
+  $('#zReset').textContent = Math.round(zoom * 100) + '%';
+  renderCode();
+  if (run && run.current) highlight(run.current, 'running');
+  if (lastError) highlight(lastError, 'error');
+}
+
+let zoom = 1;
+function setZoom(z){ zoom = Math.min(2, Math.max(0.4, Math.round(z * 10) / 10)); render(); }
+
+/* ============================================================
+   Highlighting (flowchart <-> code)
+   ============================================================ */
+function highlight(id, cls){
+  document.querySelectorAll('.' + cls).forEach(el => el.classList.remove(cls));
+  if (!id) return;
+  const n = document.querySelector(`.node[data-id="${id}"]`);
+  if (n) n.classList.add(cls);
+  const lines = document.querySelectorAll(`.cl.main[data-id="${id}"]`);
+  lines.forEach(l => l.classList.add(cls));
+  if (cls === 'running' && lines[0]){
+    const c = $('#code'), l = lines[0];
+    if (l.offsetTop < c.scrollTop || l.offsetTop > c.scrollTop + c.clientHeight - 30) c.scrollTop = l.offsetTop - c.clientHeight / 2;
+  }
+}
+function hoverLink(id){
+  document.querySelectorAll('.hover-link').forEach(el => el.classList.remove('hover-link'));
+  if (!id) return;
+  document.querySelectorAll(`.node[data-id="${id}"], .cl[data-id="${id}"]`).forEach(el => el.classList.add('hover-link'));
+}
+
+/* ============================================================
+   Palette, drag & drop, + menu
+   ============================================================ */
+function iconSvg(t){
+  const shapes = {
+    var: '<rect x="4" y="4" width="32" height="20" rx="2"/><path d="M9 4V24M4 9H36" style="fill:none"/>',
+    set: '<rect x="4" y="4" width="32" height="20" rx="2"/>',
+    input: '<path d="M10 4H36L30 24H4Z"/>',
+    output: '<path d="M10 4H36L30 24H4Z"/>',
+    if: '<path d="M20 2L37 14L20 26L3 14Z"/>',
+    while: '<path d="M20 2L37 14L20 26L3 14Z"/>',
+    for: '<path d="M10 3H30L37 14L30 25H10L3 14Z"/>',
+  };
+  const mark = {input:'<path d="M16 14h8M21 11l3 3-3 3" style="fill:none;stroke-width:1.6"/>', output:'<path d="M15 11v6M19 11v6M23 11v6" style="fill:none;stroke-width:1.6"/>'}[t] || '';
+  return `<svg viewBox="0 0 40 28" class="node t-${t}" style="cursor:inherit"><g class="shape" style="stroke-width:1.8">${shapes[t]}</g><g class="shape" style="fill:none">${mark}</g></svg>`;
+}
+function buildPalette(){
+  $('#palette').innerHTML = Object.entries(TYPES).map(([t, d]) =>
+    `<div class="pal-item" data-type="${t}" role="button" tabindex="0">${iconSvg(t)}<div><b>${d.label}</b><small>${d.desc}</small></div></div>`).join('');
+  $('#plusMenu').innerHTML = Object.entries(TYPES).map(([t, d]) =>
+    `<button data-type="${t}">${iconSvg(t)}<span><b>${d.label}</b><small>${d.desc}</small></span></button>`).join('');
+  $('#plusMenu').querySelectorAll('svg').forEach(s => { s.style.width = '36px'; s.style.height = '26px'; s.style.flex = 'none'; });
+}
+
+let drag = null;
+function startDrag(e, info){
+  if (e.button !== undefined && e.button !== 0) return;
+  drag = Object.assign({sx:e.clientX, sy:e.clientY, moved:false, zone:null}, info);
+  window.addEventListener('pointermove', onDragMove);
+  window.addEventListener('pointerup', onDragEnd, {once:true});
+  window.addEventListener('pointercancel', onDragEnd, {once:true});
+}
+function onDragMove(e){
+  if (!drag) return;
+  if (!drag.moved){
+    if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return;
+    if (run){ toast('Stop the program first to make changes'); drag = null; return; }
+    drag.moved = true;
+    document.body.classList.add('dragging');
+    const g = $('#ghost');
+    g.textContent = drag.kind === 'new' ? TYPES[drag.type].label : TYPES[findBlock(drag.id).b.t].label;
+    g.style.display = 'block';
+    if (drag.kind === 'move'){
+      const moving = findBlock(drag.id).b;
+      document.querySelector(`.node[data-id="${drag.id}"]`)?.classList.add('drag-src');
+      drag.zones = [...document.querySelectorAll('.zone')].filter(z => !(z.dataset.owner !== 'root' && contains(moving, z.dataset.owner)));
+    } else drag.zones = [...document.querySelectorAll('.zone')];
+  }
+  const g = $('#ghost');
+  g.style.left = e.clientX + 'px';
+  g.style.top = e.clientY + 'px';
+  // auto-scroll near canvas edges
+  const c = $('#canvas'), r = c.getBoundingClientRect();
+  if (e.clientX > r.left && e.clientX < r.right){
+    if (e.clientY > r.bottom - 40 && e.clientY < r.bottom + 10) c.scrollTop += 12;
+    else if (e.clientY < r.top + 40 && e.clientY > r.top - 10) c.scrollTop -= 12;
+  }
+  let best = null, bestD = 70;
+  for (const z of drag.zones){
+    const zr = z.getBoundingClientRect();
+    const d = Math.hypot(zr.left + zr.width / 2 - e.clientX, zr.top + zr.height / 2 - e.clientY);
+    if (d < bestD){ bestD = d; best = z; }
+  }
+  if (drag.zone !== best){
+    drag.zone?.classList.remove('active');
+    best?.classList.add('active');
+    drag.zone = best;
+  }
+}
+function onDragEnd(){
+  window.removeEventListener('pointermove', onDragMove);
+  const d = drag;
+  drag = null;
+  document.body.classList.remove('dragging');
+  $('#ghost').style.display = 'none';
+  document.querySelectorAll('.drag-src').forEach(n => n.classList.remove('drag-src'));
+  if (!d) return;
+  if (!d.moved){ d.onClick && d.onClick(); return; }
+  if (!d.zone) return;
+  const {owner, key} = d.zone.dataset;
+  let idx = +d.zone.dataset.i;
+  if (d.kind === 'new') openEditor(makeBlock(d.type), {owner, key, idx});
+  else {
+    commit(() => {
+      const f = findBlock(d.id);
+      const target = getList(owner, key);
+      if (f.list === target && f.i < idx) idx--;
+      f.list.splice(f.i, 1);
+      target.splice(idx, 0, f.b);
+    });
+  }
+}
+
+let plusTarget = null;
+function openPlusMenu(zoneEl){
+  if (run){ toast('Stop the program first to make changes'); return; }
+  plusTarget = {...zoneEl.dataset, idx:+zoneEl.dataset.i};
+  const menu = $('#plusMenu'), r = zoneEl.getBoundingClientRect();
+  menu.hidden = false;
+  const mh = menu.offsetHeight, mw = menu.offsetWidth;
+  let top = r.bottom + 6;
+  if (top + mh > innerHeight - 8) top = Math.max(8, r.top - mh - 6);
+  menu.style.top = top + 'px';
+  menu.style.left = Math.min(Math.max(8, r.left + r.width / 2 - mw / 2), innerWidth - mw - 8) + 'px';
+}
+
+/* ============================================================
+   Editor modal
+   ============================================================ */
+let editing = null; // {block (draft copy), orig, insert}
+function openEditor(block, insert){
+  if (run){ toast('Stop the program first to make changes'); return; }
+  editing = {draft:JSON.parse(JSON.stringify(block)), orig:insert ? null : block, insert};
+  const t = block.t, d = editing.draft;
+  $('#mIcon').innerHTML = iconSvg(t);
+  $('#mTitle').textContent = (insert ? 'Add ' : 'Edit ') + TYPES[t].label;
+  $('#mSub').textContent = TYPES[t].desc + '.';
+  $('#mDelete').hidden = !!insert;
+  const vars = knownVars();
+  const varOptions = sel => {
+    if (!vars.size) return '';
+    return [...vars].map(([n, vt]) => `<option value="${esc(n)}"${n === sel ? ' selected' : ''}>${esc(n)}  (${VTYPES[vt]})</option>`).join('');
+  };
+  const chips = (forId, extra) => {
+    const vchips = [...vars.keys()].map(n => `<button type="button" class="chip var" data-ins="${esc(n)}" data-for="${forId}">${esc(n)}</button>`).join('');
+    return `<div class="chips">${vchips}${extra.map(x => `<button type="button" class="chip" data-ins="${esc(x)}" data-for="${forId}">${esc(x)}</button>`).join('')}</div>`;
+  };
+  const noVars = `<div class="field"><div class="err">There are no variables yet. First add a Variable shape (above this one) to store the value in.</div></div>`;
+  let html = '';
+  if (t === 'var'){
+    html = `
+      <div class="field" id="fName"><label for="iName">Name</label><input type="text" id="iName" value="${esc(d.name)}" placeholder="e.g. age" autocomplete="off" spellcheck="false"><div class="hint">One word. Letters, numbers and _ only (spaces become _).</div></div>
+      <div class="field"><label>Type of value</label><div class="seg" id="segType">
+        ${Object.entries(VTYPES).map(([k, l]) => `<button type="button" data-v="${k}" class="${d.vtype === k ? 'on' : ''}">${l}<small>${{text:'"hello"', int:'42', float:'3.5'}[k]}</small></button>`).join('')}
+      </div></div>
+      <div class="field" id="fValue"><label for="iValue">Starting value <span style="font-weight:600;color:var(--muted)">(optional)</span></label><input type="text" id="iValue" value="${esc(d.value)}" autocomplete="off"><div class="hint" id="valueHint"></div></div>`;
+  } else if (t === 'input'){
+    html = vars.size ? `
+      <div class="field"><label for="iName">Store the answer in</label><select id="iName">${varOptions(d.name)}</select><div class="hint">A Number or Decimal variable will turn the answer into a number.</div></div>
+      <div class="field"><label for="iPrompt">Question to show <span style="font-weight:600;color:var(--muted)">(optional)</span></label><input type="text" id="iPrompt" value="${esc(d.prompt)}" placeholder="e.g. What is your name?" autocomplete="off"><div class="hint">Just type the words — no quotes needed.</div></div>` : noVars;
+  } else if (t === 'output'){
+    html = `
+      <div class="field" id="fExpr"><label for="iExpr">What to show</label><input type="text" class="mono" id="iExpr" value="${esc(d.expr)}" placeholder='"Hello, " + name' autocomplete="off" spellcheck="false">
+      ${chips('iExpr', ['" "', '+', ','])}
+      <div class="hint">Words go inside quotes: <b>"Hello"</b>. A variable name has no quotes: <b>name</b>. Join pieces with a comma: <b>"Age:", age</b> — or with <b>+</b> if they are all text.</div></div>`;
+  } else if (t === 'set'){
+    html = vars.size ? `
+      <div class="field"><label for="iName">Variable to change</label><select id="iName">${varOptions(d.name)}</select></div>
+      <div class="field" id="fExpr"><label for="iExpr">New value</label><input type="text" class="mono" id="iExpr" value="${esc(d.expr)}" placeholder="score + 1" autocomplete="off" spellcheck="false">
+      ${chips('iExpr', ['+', '-', '*', '/', '%', '" "', 'str()', 'int()'])}
+      <div class="hint">Use maths with numbers and variables, e.g. <b>price * 2</b>. Text goes in quotes.</div></div>` : noVars;
+  } else if (t === 'if' || t === 'while'){
+    html = `
+      <div class="field" id="fExpr"><label for="iExpr">${t === 'if' ? 'Question (Yes or No?)' : 'Keep repeating while…'}</label><input type="text" class="mono" id="iExpr" value="${esc(d.cond)}" placeholder="${t === 'if' ? 'age >= 18' : 'count < 10'}" autocomplete="off" spellcheck="false">
+      ${chips('iExpr', ['==', '!=', '<', '>', '<=', '>=', 'and', 'or', 'not', '%'])}
+      <div class="hint">${t === 'if' ? 'If it is true, the Yes path runs. Otherwise the No path runs.' : 'The shapes inside run again and again while this is true. Make sure something inside changes it, or it will never stop!'} Use <b>==</b> to check if two things are equal.</div></div>`;
+  } else if (t === 'for'){
+    html = `
+      <div class="field" id="fName"><label for="iName">Counter name</label><input type="text" id="iName" value="${esc(d.name)}" autocomplete="off" spellcheck="false"><div class="hint">A variable that holds the current count. Usually <b>i</b> or a word like <b>n</b>.</div></div>
+      <div class="row3">
+        <div class="field" id="fFrom"><label for="iFrom">From</label><input type="text" class="mono" id="iFrom" value="${esc(d.from)}" autocomplete="off" spellcheck="false"></div>
+        <div class="field" id="fTo"><label for="iTo">To</label><input type="text" class="mono" id="iTo" value="${esc(d.to)}" autocomplete="off" spellcheck="false"></div>
+        <div class="field" id="fStep"><label for="iStep">Step</label><input type="text" class="mono" id="iStep" value="${esc(d.step)}" autocomplete="off"></div>
+      </div>
+      ${chips('iTo', [])}
+      <div class="hint" style="color:var(--muted);font-size:12.5px">Counts from <b>From</b> up to <b>To</b>, including both. Use a step of −1 to count down. From and To can be numbers or variables.</div>`;
+  }
+  html += `<div class="field"><label>Python</label><div class="py-preview" id="pyPrev"></div></div>`;
+  $('#mBody').innerHTML = html;
+  $('#modal').hidden = false;
+
+  const seg = $('#segType');
+  if (seg) seg.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    updatePreview();
+  });
+  $('#mBody').addEventListener('input', updatePreview);
+  $('#mBody').addEventListener('change', updatePreview);
+  $('#mBody').querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => insertAtCursor($('#' + c.dataset.for), c.dataset.ins)));
+  updatePreview();
+  const first = $('#mBody').querySelector('input[type=text], select');
+  if (first) setTimeout(() => { first.focus(); if (first.select && first.value) first.select(); }, 30);
+}
+function insertAtCursor(input, text){
+  if (!input) return;
+  const s = input.selectionStart ?? input.value.length, e = input.selectionEnd ?? input.value.length;
+  const before = input.value.slice(0, s), after = input.value.slice(e);
+  let ins = text;
+  if (/^[a-z]+$|^[=!<>]=?$|^[+\-*/%,]$/i.test(text)){
+    if (before && !/\s$/.test(before) && text !== ',') ins = ' ' + ins;
+    ins += ' ';
+  }
+  input.value = before + ins + after;
+  let pos = before.length + ins.length;
+  if (text === '" "'){ input.value = before + '""' + after; pos = before.length + 1; }
+  else if (text.endsWith('()')) pos = before.length + ins.length - 1;
+  input.focus();
+  input.setSelectionRange(pos, pos);
+  updatePreview();
+}
+
+function readForm(){
+  const d = editing.draft, v = id => { const el = $('#' + id); return el ? el.value : undefined; };
+  if (d.t === 'var'){
+    d.name = (v('iName') || '').trim().replace(/\s+/g, '_');
+    d.vtype = $('#segType .on')?.dataset.v || 'text';
+    d.value = d.vtype === 'text' ? v('iValue') : v('iValue').trim();
+  }
+  if (d.t === 'input'){ if (v('iName') !== undefined) d.name = v('iName'); d.prompt = v('iPrompt') ?? d.prompt; }
+  if (d.t === 'output') d.expr = normalizeQuotes(v('iExpr').trim());
+  if (d.t === 'set'){ if (v('iName') !== undefined) d.name = v('iName'); if (v('iExpr') !== undefined) d.expr = normalizeQuotes(v('iExpr').trim()); }
+  if (d.t === 'if' || d.t === 'while') d.cond = normalizeQuotes(v('iExpr').trim());
+  if (d.t === 'for'){
+    d.name = v('iName').trim().replace(/\s+/g, '_');
+    d.from = normalizeQuotes(v('iFrom').trim());
+    d.to = normalizeQuotes(v('iTo').trim());
+    d.step = v('iStep').trim().replace('−', '-') || '1';
+  }
+  return d;
+}
+// returns {fieldId: message}
+function validate(d){
+  const errs = {};
+  const vars = knownVars();
+  if (d.t === 'for' && d.name) vars.set(d.name, 'int');
+  const checkName = (fid, name) => {
+    if (!name) errs[fid] = 'Please give it a name.';
+    else if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) errs[fid] = /^[0-9]/.test(name) ? 'A name can\'t start with a number.' : 'Use only letters, numbers and _ (no symbols).';
+    else if (RESERVED.has(name)) errs[fid] = `"${name}" is a special Python word. Pick another name.`;
+  };
+  const checkExpr = (fid, src, allowArgs) => {
+    if (!src && !allowArgs){ errs[fid] = 'This can\'t be empty.'; return; }
+    try {
+      const trees = parse(src, allowArgs);
+      const used = {names:new Set(), calls:new Set()};
+      trees.forEach(tr => collectNames(tr, used));
+      for (const c of used.calls){
+        if (c === 'print') { errs[fid] = 'No need for print( ) — the Output shape already shows it.'; return; }
+        if (c === 'input') { errs[fid] = 'Use an Input shape to ask the user something.'; return; }
+        if (!BUILTINS[c]){ errs[fid] = `Unknown helper "${c}( )". You can use: ${Object.keys(BUILTINS).join(', ')}.`; return; }
+      }
+      for (const n of used.names){
+        if (!vars.has(n)){ errs[fid] = nameTip(n); return; }
+      }
+    } catch (e){ errs[fid] = e.tip || e.message; }
+  };
+  if (d.t === 'var'){
+    checkName('fName', d.name);
+    if (d.vtype === 'int' && d.value && !/^[+-]?\d+$/.test(d.value)) errs.fValue = 'A Number must be a whole number like 0, 7 or -3. Choose Decimal for numbers like 2.5.';
+    if (d.vtype === 'float' && d.value && !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(d.value)) errs.fValue = 'A Decimal must be a number like 2.5 or 10.';
+  }
+  if ((d.t === 'input' || d.t === 'set') && !vars.size) errs._ = 'no vars';
+  if (d.t === 'output') checkExpr('fExpr', d.expr, true);
+  if (d.t === 'set' && vars.size) checkExpr('fExpr', d.expr, false);
+  if (d.t === 'if' || d.t === 'while') checkExpr('fExpr', d.cond, false);
+  if (d.t === 'for'){
+    checkName('fName', d.name);
+    checkExpr('fFrom', d.from, false);
+    checkExpr('fTo', d.to, false);
+    if (!/^[+-]?\d+$/.test(d.step) || parseInt(d.step, 10) === 0) errs.fStep = 'A whole number, not 0.';
+  }
+  return errs;
+}
+function updatePreview(){
+  if (!editing) return;
+  const d = readForm();
+  if (d.t === 'var'){
+    $('#valueHint').textContent = {text:'Type the text as it is — no quotes needed. Leave empty for blank text.', int:'A whole number. Leave empty to start at 0.', float:'A number that can have a decimal point. Leave empty to start at 0.0.'}[d.vtype];
+    $('#iValue').placeholder = {text:'e.g. Alex', int:'0', float:'0.0'}[d.vtype];
+    $('#iValue').classList.toggle('mono', d.vtype !== 'text');
+  }
+  const errs = validate(d);
+  $('#mBody').querySelectorAll('.field').forEach(f => { f.classList.remove('bad'); f.querySelector('.err.live')?.remove(); });
+  editing.errs = errs;
+  const prev = $('#pyPrev');
+  if (!prev) return;
+  if (errs._){ prev.textContent = '—'; return; }
+  // preview: generate code for just this block
+  const saved = state.body;
+  const temp = JSON.parse(JSON.stringify(d));
+  (CHILD_KEYS[d.t] || []).forEach(k => temp[k] = []);
+  const vars = knownVars();
+  let lines;
+  state = {...state, body:[temp]};
+  try {
+    lines = genPython();
+    if (d.t === 'input'){
+      const p = d.prompt ? `input(${pyQuote(promptText(d))})` : 'input()';
+      const vt = vars.get(d.name);
+      lines = [{text:`${d.name} = ${vt === 'int' ? `int(${p})` : vt === 'float' ? `float(${p})` : p}`}];
+    }
+  } finally { state.body = saved; }
+  prev.textContent = lines.filter(l => l.text.trim() !== 'pass').map(l => l.text).join('\n') + (CHILD_KEYS[d.t] ? '\n    ...' : '');
+}
+function showErrors(errs){
+  for (const [fid, msg] of Object.entries(errs)){
+    const f = $('#' + fid);
+    if (!f) continue;
+    f.classList.add('bad');
+    const e = document.createElement('div');
+    e.className = 'err live';
+    e.textContent = msg;
+    f.appendChild(e);
+  }
+}
+function saveEditor(){
+  if (!editing) return;
+  const d = readForm();
+  const errs = validate(d);
+  if (errs._){ closeEditor(); return; }
+  if (Object.keys(errs).length){
+    $('#mBody').querySelectorAll('.field').forEach(f => { f.classList.remove('bad'); f.querySelector('.err.live')?.remove(); });
+    showErrors(errs);
+    const bad = $('#mBody .field.bad input');
+    bad && bad.focus();
+    return;
+  }
+  const {orig, insert} = editing;
+  commit(() => {
+    if (insert){
+      const list = getList(insert.owner, insert.key);
+      list.splice(Math.min(insert.idx, list.length), 0, d);
+    } else {
+      for (const k in d) if (!Array.isArray(d[k]) && k !== 'id') orig[k] = d[k];
+    }
+  });
+  closeEditor();
+}
+function closeEditor(){
+  editing = null;
+  $('#modal').hidden = true;
+  $('#mBody').innerHTML = '';
+  // re-create listeners next open (innerHTML replaced, but the container listeners stack) — reset the node
+  const body = $('#mBody'), fresh = body.cloneNode(false);
+  body.replaceWith(fresh);
+}
+function deleteBlock(id){
+  if (run){ toast('Stop the program first to make changes'); return; }
+  commit(() => { const f = findBlock(id); if (f) f.list.splice(f.i, 1); });
+}
+
+/* ============================================================
+   Running the program
+   ============================================================ */
+let run = null, lastError = null;
+const STOP = Symbol('stop');
+const MAX_STEPS = 300000;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function out(html, cls){
+  const o = $('#output');
+  o.querySelector('.o-placeholder')?.remove();
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.innerHTML = html;
+  o.appendChild(d);
+  while (o.childElementCount > 2000) o.firstChild.remove();
+  o.scrollTop = o.scrollHeight;
+  return d;
+}
+function renderVars(){
+  const el = $('#vars');
+  const env = run ? run.env : lastEnv;
+  if (!env || !env.size){ el.innerHTML = `<div class="panel-head" style="padding:0">Variables</div><div class="none">Variables and their values will show here while the program runs.</div>`; return; }
+  el.innerHTML = `<div class="panel-head" style="padding:0">Variables</div><table>${[...env].map(([n, v]) =>
+    `<tr><td>${esc(n)}</td><td class="ty">${{str:'Text', int:'Number', float:'Decimal', bool:'True/False'}[v.t]}</td><td class="v">${esc(pyRepr(v))}</td></tr>`).join('')}</table>`;
+}
+let lastEnv = null;
+
+async function tick(id){
+  if (run.stopped) throw STOP;
+  run.steps++;
+  run.current = id;
+  if (run.steps > MAX_STEPS) throw new PyError('Stopped', `the program ran more than ${MAX_STEPS.toLocaleString()} steps`, 'This usually means a loop never ends. Check that something inside the loop changes so its question eventually becomes false.');
+  const delay = +$('#speed').value;
+  if (delay > 0){ highlight(id, 'running'); renderVars(); await sleep(delay); }
+  else if (run.steps % 1000 === 0){ highlight(id, 'running'); renderVars(); await sleep(0); }
+  if (run.stopped) throw STOP;
+}
+function askInput(prompt){
+  return new Promise((resolve, reject) => {
+    const line = out(`<span>${esc(prompt)}</span>`, 'o-in');
+    const input = document.createElement('input');
+    input.setAttribute('aria-label', prompt || 'Your answer');
+    input.autocomplete = 'off';
+    line.appendChild(input);
+    input.focus();
+    run.cancelInput = () => { input.disabled = true; reject(STOP); };
+    input.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const val = input.value;
+      input.replaceWith(Object.assign(document.createElement('span'), {className:'o-typed', textContent:val}));
+      run.cancelInput = null;
+      resolve(val);
+    });
+  });
+}
+function convertInput(raw, vt, name){
+  if (vt === 'int'){
+    const s = raw.trim();
+    if (!/^[+-]?\d+$/.test(s)) throw new PyError('ValueError', `invalid literal for int() with base 10: ${pyRepr(S(raw))}`,
+      `"${name}" is a Number variable, so the answer must be a whole number like 42.` + (/^[+-]?\d*\.\d+$/.test(s) ? ' To allow answers like 4.5, change the variable type to Decimal.' : ''));
+    return I(parseInt(s, 10));
+  }
+  if (vt === 'float') return BUILTINS.float([S(raw)]);
+  return S(raw);
+}
+const evalExpr = src => evalNode(parseCached(src, false)[0], run.env);
+
+async function execList(list){ for (const b of list) await execBlock(b); }
+async function execBlock(b){
+  await tick(b.id);
+  const env = run.env;
+  switch (b.t){
+    case 'var': env.set(b.name, literalValue(b)); break;
+    case 'input': {
+      const raw = await askInput(promptText(b));
+      env.set(b.name, convertInput(raw, run.vars.get(b.name), b.name));
+      break;
+    }
+    case 'output': {
+      const vals = parseCached(b.expr, true).map(t => evalNode(t, env));
+      out(esc(vals.map(pyStr).join(' ')));
+      break;
+    }
+    case 'set': env.set(b.name, evalExpr(b.expr)); break;
+    case 'if': await execList(truthy(evalExpr(b.cond)) ? b.yes : b.no); break;
+    case 'while':
+      while (truthy(evalExpr(b.cond))){ await execList(b.body); await tick(b.id); }
+      break;
+    case 'for': {
+      const step = parseInt(b.step, 10) || 1;
+      const from = evalExpr(b.from), to = evalExpr(b.to);
+      for (const x of [from, to]) if (x.t !== 'int' && x.t !== 'bool')
+        throw new PyError('TypeError', `'${x.t}' object cannot be interpreted as an integer`, 'A Count loop needs whole numbers for From and To.');
+      const a = num(from), z = num(to) + (step > 0 ? 1 : -1);
+      let first = true;
+      for (let v = a; step > 0 ? v < z : v > z; v += step){
+        if (!first) await tick(b.id);
+        first = false;
+        env.set(b.name, I(v));
+        await execList(b.body);
+      }
+      break;
+    }
+  }
+}
+
+async function runProgram(){
+  if (run){ stopProgram(); return; }
+  if (editing) return;
+  lastError = null;
+  highlight(null, 'error');
+  $('#output').innerHTML = '';
+  run = {stopped:false, steps:0, env:new Map(), vars:knownVars(), current:null};
+  const btn = $('#btnRun');
+  btn.textContent = '■ Stop';
+  btn.classList.add('stop');
+  out('▶ Program started', 'o-sys');
+  highlight('start', 'running');
+  try {
+    await sleep(+$('#speed').value ? 200 : 0);
+    await execList(state.body);
+    highlight('end', 'running');
+    out('✓ Program finished', 'o-sys o-ok');
+  } catch (e){
+    if (e === STOP) out('■ Program stopped', 'o-sys');
+    else if (e instanceof PyError){
+      lastError = run.current;
+      out(`${esc(e.type)}: ${esc(e.message)}`, 'o-err');
+      if (e.tip) out(esc(e.tip), 'o-tip');
+      out('The shape that caused the problem is outlined in red.', 'o-sys');
+    } else {
+      console.error(e);
+      out('Something went wrong inside FlowPy: ' + esc(e.message), 'o-err');
+    }
+  } finally {
+    lastEnv = run.env;
+    renderVars();
+    run = null;
+    btn.textContent = '▶ Run';
+    btn.classList.remove('stop');
+    setTimeout(() => { if (!run) highlight(null, 'running'); }, 600);
+    if (lastError) highlight(lastError, 'error');
+  }
+}
+function stopProgram(){
+  if (!run) return;
+  run.stopped = true;
+  if (run.cancelInput) run.cancelInput();
+}
+
+/* ============================================================
+   Examples
+   ============================================================ */
+function blk(t, fields, kids){
+  const b = Object.assign(makeBlock(t), fields);
+  if (kids) Object.assign(b, kids);
+  return b;
+}
+const EXAMPLES = {
+  blank: () => ({title:'My program', body:[]}),
+  hello: () => ({title:'Say hello', body:[
+    blk('var', {name:'name', vtype:'text', value:''}),
+    blk('var', {name:'age', vtype:'int', value:''}),
+    blk('var', {name:'next_year', vtype:'int', value:''}),
+    blk('input', {name:'name', prompt:'What is your name?'}),
+    blk('input', {name:'age', prompt:'How old are you?'}),
+    blk('set', {name:'next_year', expr:'age + 1'}),
+    blk('output', {expr:'"Hello, " + name + "!"'}),
+    blk('output', {expr:'"Next year you will be", next_year'}),
+  ]}),
+  evenodd: () => ({title:'Even or odd', body:[
+    blk('var', {name:'limit', vtype:'int', value:'10'}),
+    blk('var', {name:'evens', vtype:'int', value:'0'}),
+    blk('input', {name:'limit', prompt:'Count up to which number?'}),
+    blk('for', {name:'n', from:'1', to:'limit', step:'1'}, {body:[
+      blk('if', {cond:'n % 2 == 0'}, {
+        yes:[blk('output', {expr:'n, "is even"'}), blk('set', {name:'evens', expr:'evens + 1'})],
+        no:[blk('output', {expr:'n, "is odd"'})],
+      }),
+    ]}),
+    blk('output', {expr:'"Even numbers found:", evens'}),
+  ]}),
+};
+function loadExample(key){
+  if (run) stopProgram();
+  $('#exMenu').hidden = true;
+  const ex = EXAMPLES[key]();
+  commit(() => { state.title = ex.title; state.body = ex.body; });
+  lastError = null; lastEnv = null;
+  $('#output').innerHTML = `<div class="o-placeholder">${key === 'blank' ? 'Fresh start! Add shapes, then press ▶ Run.' : `Loaded “${esc(ex.title)}”. Press ▶ Run to try it.`}</div>`;
+  renderVars();
+  $('#canvas').scrollTop = 0;
+}
+
+/* ============================================================
+   Misc UI
+   ============================================================ */
+let toastTimer;
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+async function copyText(text){
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch {
+    const ta = Object.assign(document.createElement('textarea'), {value:text});
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
+function wire(){
+  buildPalette();
+  $('#palette').addEventListener('pointerdown', e => {
+    const item = e.target.closest('.pal-item');
+    if (!item) return;
+    e.preventDefault();
+    const type = item.dataset.type;
+    startDrag(e, {kind:'new', type, onClick:() => openEditor(makeBlock(type), {owner:'root', key:'body', idx:state.body.length})});
+  });
+  $('#palette').addEventListener('keydown', e => {
+    const item = e.target.closest('.pal-item');
+    if (item && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); openEditor(makeBlock(item.dataset.type), {owner:'root', key:'body', idx:state.body.length}); }
+  });
+
+  const svg = $('#chart');
+  svg.addEventListener('pointerdown', e => {
+    if (e.target.closest('.del') || e.target.closest('.zone')) return;
+    const n = e.target.closest('.node');
+    if (!n || n.classList.contains('t-term')) return;
+    const id = n.dataset.id;
+    startDrag(e, {kind:'move', id, onClick:() => { const f = findBlock(id); f && openEditor(f.b, null); }});
+  });
+  svg.addEventListener('click', e => {
+    const del = e.target.closest('.del');
+    if (del){ deleteBlock(del.dataset.del); return; }
+    const z = e.target.closest('.zone');
+    if (z){ e.stopPropagation(); openPlusMenu(z); }
+  });
+  svg.addEventListener('pointerover', e => { const n = e.target.closest('.node'); hoverLink(n ? n.dataset.id : null); });
+  svg.addEventListener('pointerleave', () => hoverLink(null));
+  $('#code').addEventListener('pointerover', e => { const l = e.target.closest('.cl[data-id]'); hoverLink(l ? l.dataset.id : null); });
+  $('#code').addEventListener('pointerleave', () => hoverLink(null));
+  $('#code').addEventListener('click', e => {
+    const l = e.target.closest('.cl[data-id]');
+    const n = l && document.querySelector(`.node[data-id="${l.dataset.id}"]`);
+    if (n) n.scrollIntoView({block:'center', inline:'center', behavior:'smooth'});
+  });
+
+  $('#plusMenu').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !plusTarget) return;
+    $('#plusMenu').hidden = true;
+    openEditor(makeBlock(b.dataset.type), plusTarget);
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#plusMenu') && !e.target.closest('.zone')) $('#plusMenu').hidden = true;
+    if (!e.target.closest('.menu-wrap')) $('#exMenu').hidden = true;
+  });
+
+  $('#btnExamples').addEventListener('click', () => { $('#exMenu').hidden = !$('#exMenu').hidden; });
+  document.querySelectorAll('[data-ex]').forEach(b => b.addEventListener('click', () => loadExample(b.dataset.ex)));
+  $('#btnUndo').addEventListener('click', undo);
+  $('#btnRedo').addEventListener('click', redo);
+  $('#btnShare').addEventListener('click', async () => {
+    clearTimeout(saveTimer);
+    await saveToUrl();
+    let link = location.href;
+    if (!new URL(link).searchParams.get('p') && state.body.length){
+      const url = new URL(link); url.searchParams.set('p', await encodeState()); link = url.toString();
+    }
+    toast(await copyText(link) ? 'Link copied! Anyone who opens it gets this flowchart.' : 'Copy the link from the address bar.');
+  });
+  $('#btnRun').addEventListener('click', runProgram);
+  $('#btnClear').addEventListener('click', () => { if (!run){ $('#output').innerHTML = ''; lastEnv = null; renderVars(); } });
+  $('#btnCopyCode').addEventListener('click', async () => {
+    toast(await copyText(genPython().map(l => l.text).join('\n') + '\n') ? 'Python code copied' : 'Could not copy');
+  });
+  let titleTimer;
+  $('#title').addEventListener('input', e => {
+    state.title = e.target.value;
+    clearTimeout(titleTimer);
+    titleTimer = setTimeout(scheduleSave, 300);
+  });
+
+  $('#zIn').addEventListener('click', () => setZoom(zoom + 0.1));
+  $('#zOut').addEventListener('click', () => setZoom(zoom - 0.1));
+  $('#zReset').addEventListener('click', () => setZoom(1));
+  $('#canvas').addEventListener('wheel', e => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    setZoom(zoom - Math.sign(e.deltaY) * 0.1);
+  }, {passive:false});
+
+  $('#mSave').addEventListener('click', saveEditor);
+  $('#mCancel').addEventListener('click', closeEditor);
+  $('#mDelete').addEventListener('click', () => { const id = editing?.orig?.id; closeEditor(); if (id) deleteBlock(id); });
+  $('#modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') closeEditor(); });
+  $('#modal').addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeEditor();
+    if (e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); saveEditor(); }
+  });
+
+  document.addEventListener('keydown', e => {
+    if (!$('#modal').hidden || e.target.tagName === 'INPUT') return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key.toLowerCase() === 'z'){ e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    if (mod && e.key.toLowerCase() === 'y'){ e.preventDefault(); redo(); }
+    if (e.key === 'Escape'){ $('#plusMenu').hidden = true; $('#exMenu').hidden = true; }
+  });
+  let rt;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 100); });
+}
+
+async function init(){
+  wire();
+  const p = new URLSearchParams(location.search).get('p');
+  if (p){
+    try { loadData(await decodeState(p)); }
+    catch (e){ console.warn(e); toast('That link could not be opened — starting fresh.'); }
+  }
+  afterChange();
+  renderVars();
+  if (document.fonts) document.fonts.ready.then(render);
+}
+init();
+</script>
+</body>
+</html>
