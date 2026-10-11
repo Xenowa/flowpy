@@ -219,8 +219,9 @@ body.dragging,body.dragging *{cursor:grabbing!important}
     <button class="btn" id="btnExamples">Examples ▾</button>
     <div class="dropdown" id="exMenu" hidden>
       <button data-ex="blank"><span><b>Start from scratch</b><small>An empty flowchart</small></span></button>
-      <button data-ex="hello"><span><b>Example 1: Say hello</b><small>Variables, input, output, a calculation</small></span></button>
-      <button data-ex="evenodd"><span><b>Example 2: Even or odd</b><small>A count loop with a decision inside</small></span></button>
+      <button data-ex="eligible"><span><b>Example 1: Old enough?</b><small>Ask for an age, then decide: 18 or over can attend</small></span></button>
+      <button data-ex="hello"><span><b>Example 2: Say hello</b><small>Variables, input, output, a calculation</small></span></button>
+      <button data-ex="evenodd"><span><b>Example 3: Even or odd</b><small>A count loop with a decision inside</small></span></button>
     </div>
   </div>
   <button class="btn" id="btnUndo" title="Undo (Ctrl+Z)">Undo</button>
@@ -248,7 +249,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
     <div id="canvas"><svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg></div>
     <div class="empty-hint" id="emptyHint" hidden>
       <b>Your flowchart is empty.</b><br>Drag a shape from the left onto the <b>+</b>, or try an example:
-      <div class="row"><button class="btn small" data-ex="hello">Say hello</button><button class="btn small" data-ex="evenodd">Even or odd</button></div>
+      <div class="row"><button class="btn small" data-ex="eligible">Old enough?</button><button class="btn small" data-ex="hello">Say hello</button><button class="btn small" data-ex="evenodd">Even or odd</button></div>
     </div>
     <div class="zoom"><button id="zOut" title="Zoom out">−</button><button id="zReset" title="Reset zoom">100%</button><button id="zIn" title="Zoom in">+</button></div>
   </section>
@@ -1654,6 +1655,15 @@ function blk(t, fields, kids){
 }
 const EXAMPLES = {
   blank: () => ({title:'My program', body:[]}),
+  // An event needs attendees to be at least 18: ask for the age, then decide
+  eligible: () => ({title:'Old enough?', body:[
+    blk('set', {name:'age', vtype:'int', expr:'0'}),
+    blk('input', {name:'age', prompt:'How old are you?'}),
+    blk('if', {cond:'age >= 18'}, {
+      yes:[blk('output', {expr:'"You can attend the event!"'})],
+      no:[blk('output', {expr:'"Sorry, you must be 18 or older."'})],
+    }),
+  ]}),
   hello: () => ({title:'Say hello', body:[
     blk('set', {name:'name', vtype:'text', expr:''}),
     blk('set', {name:'age', vtype:'int', expr:''}),
