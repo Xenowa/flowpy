@@ -281,6 +281,19 @@ body.dragging,body.dragging *{cursor:grabbing!important}
     </div>
   </div>
 </div>
+<div class="modal-bg" id="askModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+    <div class="modal-head"><span id="askIcon"></span><h2 id="askTitle">Your program is asking</h2></div>
+    <div style="padding:10px 18px 4px">
+      <div class="field"><label for="askInput" id="askPrompt"></label><input type="text" id="askInput" autocomplete="off" spellcheck="false"><div class="hint" id="askHint"></div></div>
+    </div>
+    <div class="modal-foot">
+      <span class="spacer"></span>
+      <button class="btn" id="askCancel">Cancel</button>
+      <button class="btn primary" id="askSubmit">Submit</button>
+    </div>
+  </div>
+</div>
 <div class="dropdown" id="plusMenu" hidden style="position:fixed"></div>
 <div id="ghost"></div>
 <div id="toast"></div>
@@ -1503,24 +1516,32 @@ async function tick(id){
   else if (run.steps % 1000 === 0){ highlight(id, 'running'); renderVars(); await sleep(0); }
   if (run.stopped) throw STOP;
 }
-function askInput(prompt){
+// Ask the user in a pop-up. The question and the answer are also written to Output as a record.
+// Cancel (or Escape) stops the program.
+function askInput(prompt, name, vt){
   return new Promise((resolve, reject) => {
-    const line = out(`<span>${esc(prompt)}</span>`, 'o-in');
-    const input = document.createElement('input');
-    input.setAttribute('aria-label', prompt || 'Your answer');
-    input.autocomplete = 'off';
-    line.appendChild(input);
+    const modal = $('#askModal'), input = $('#askInput');
+    $('#askIcon').innerHTML = iconSvg('input');
+    $('#askPrompt').textContent = prompt.trim() || 'Type your answer';
+    $('#askHint').textContent = `Your answer is stored in ${name}` + (vt === 'int' ? ' — type a whole number.' : vt === 'float' ? ' — type a number.' : '.');
+    input.value = '';
+    input.className = vt === 'int' || vt === 'float' ? 'mono' : '';
+    input.inputMode = vt === 'int' || vt === 'float' ? 'decimal' : 'text';
+    modal.hidden = false;
     input.focus();
-    run.cancelInput = () => { input.disabled = true; reject(STOP); };
-    input.addEventListener('keydown', e => {
-      if (e.key !== 'Enter') return;
+    const done = () => { modal.hidden = true; run.cancelInput = null; askDone = null; };
+    run.cancelInput = () => { done(); reject(STOP); };
+    askDone = ok => {
+      if (!ok){ stopProgram(); return; }
       const val = input.value;
-      input.replaceWith(Object.assign(document.createElement('span'), {className:'o-typed', textContent:val}));
-      run.cancelInput = null;
+      done();
+      const line = out(`<span>${esc(prompt)}</span>`, 'o-in');
+      line.appendChild(Object.assign(document.createElement('span'), {className:'o-typed', textContent:val}));
       resolve(val);
-    });
+    };
   });
 }
+let askDone = null; // set while the answer pop-up is open: askDone(true) submits, askDone(false) cancels
 function convertInput(raw, vt, name){
   if (vt === 'int'){
     const s = raw.trim();
@@ -1539,7 +1560,7 @@ async function execBlock(b){
   const env = run.env;
   switch (b.t){
     case 'input': {
-      const raw = await askInput(promptText(b));
+      const raw = await askInput(promptText(b), b.name, run.vars.get(b.name));
       env.set(b.name, convertInput(raw, run.vars.get(b.name), b.name));
       break;
     }
@@ -1779,6 +1800,13 @@ function wire(){
     e.preventDefault();
     setZoom(zoom - Math.sign(e.deltaY) * 0.1);
   }, {passive:false});
+
+  $('#askSubmit').addEventListener('click', () => askDone && askDone(true));
+  $('#askCancel').addEventListener('click', () => askDone && askDone(false));
+  $('#askModal').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName !== 'BUTTON'){ e.preventDefault(); askDone && askDone(true); }
+    if (e.key === 'Escape') askDone && askDone(false);
+  });
 
   $('#mSave').addEventListener('click', saveEditor);
   $('#mCancel').addEventListener('click', closeEditor);
