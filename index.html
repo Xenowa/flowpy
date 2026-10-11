@@ -107,7 +107,6 @@ main.layout{flex:1;display:grid;grid-template-columns:210px minmax(0,1fr) 400px;
 .node:hover .del{opacity:1}
 .del circle{fill:var(--panel);stroke:var(--err);stroke-width:1.5}
 .del path{stroke:var(--err);stroke-width:1.8}
-.t-var .shape{fill:var(--var-f);stroke:var(--var-s)} .t-var .cap{fill:var(--var-s)}
 .t-set .shape{fill:var(--set-f);stroke:var(--set-s)} .t-set .cap{fill:var(--set-s)}
 .t-input .shape{fill:var(--in-f);stroke:var(--in-s)} .t-input .cap{fill:var(--in-s)}
 .t-output .shape{fill:var(--out-f);stroke:var(--out-s)} .t-output .cap{fill:var(--out-s)}
@@ -143,6 +142,9 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 .cl.running{background:var(--code-hl);border-left-color:var(--run)}
 .cl.error{background:rgba(220,38,38,.25);border-left-color:var(--err)}
 .cl[data-id]{cursor:pointer}
+.code-switch{display:flex;border:1px solid #3A4056;border-radius:8px;padding:2px;gap:2px}
+.code-switch button{border:0;background:none;color:var(--code-muted);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:800;text-transform:none;letter-spacing:0}
+.code-switch button.on{background:#3A4056;color:var(--code-ink)}
 .k{color:#C792EA}.b{color:#82AAFF}.s{color:#C3E88D}.n{color:#F78C6C}.c{color:var(--code-muted);font-style:italic}
 #output{flex:1;overflow:auto;padding:4px 12px 10px;font:400 13.5px/1.55 "JetBrains Mono",ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word}
 .o-sys{color:var(--muted);font-family:Nunito,system-ui,sans-serif;font-weight:700;font-size:12.5px;margin:4px 0}
@@ -227,8 +229,8 @@ body.dragging,body.dragging *{cursor:grabbing!important}
   <span class="spacer"></span>
   <label class="speed">Speed
     <select id="speed">
-      <option value="700">Slow</option>
-      <option value="250" selected>Normal</option>
+      <option value="700" selected>Slow</option>
+      <option value="250">Normal</option>
       <option value="0">Instant</option>
     </select>
   </label>
@@ -253,7 +255,9 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
   <section class="side">
     <div class="panel code-panel">
-      <div class="panel-head">Python code <span class="spacer"></span><button class="btn small" id="btnCopyCode">Copy</button></div>
+      <div class="panel-head"><span id="codeTitle">Pseudocode</span> <span class="spacer"></span>
+        <div class="code-switch" id="codeSwitch" role="group" aria-label="Code view"><button type="button" data-mode="pseudo" class="on">Pseudocode</button><button type="button" data-mode="python">Python</button></div>
+        <button class="btn small" id="btnCopyCode">Copy</button></div>
       <div id="code"></div>
     </div>
     <div class="panel out-panel">
@@ -290,28 +294,26 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
    Block types
    ============================================================ */
 const TYPES = {
-  var:    {label:'Variable',   cap:'VARIABLE', desc:'A box that stores text or a number'},
+  set:    {label:'Set value',  cap:'SET',      desc:'Create a variable or change its value'},
   input:  {label:'Input',      cap:'INPUT',    desc:'Ask the user to type something'},
   output: {label:'Output',     cap:'OUTPUT',   desc:'Show something on the screen'},
-  set:    {label:'Set value',  cap:'SET',      desc:"Change a variable's value"},
   if:     {label:'Decision',   cap:'IF',       desc:'Choose a path: Yes or No'},
   while:  {label:'Loop while', cap:'WHILE',    desc:'Repeat while something is true'},
   for:    {label:'Count loop', cap:'COUNT',    desc:'Count from one number to another'},
 };
-const VTYPES = {text:'Text', int:'Number', float:'Decimal'};
+const VTYPES = {text:'Text', int:'Number', float:'Decimal', bool:'True/False'};
 const CHILD_KEYS = {if:['yes','no'], while:['body'], for:['body']};
 const PY_KEYWORDS = new Set('False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
-const RESERVED = new Set([...PY_KEYWORDS, 'print','input','int','float','str','len','round','abs','min','max','range','type','list','bool','sum']);
+const RESERVED = new Set([...PY_KEYWORDS, 'print','input','int','float','str','len','round','abs','min','max','range','type','list','bool','sum','TO_STRING','TO_INTEGER','TO_DECIMAL']);
 
 let uid = 1;
 const newId = () => 'b' + (uid++);
 
 function makeBlock(t){
   const b = {id:newId(), t};
-  if (t === 'var') Object.assign(b, {name:'', vtype:'text', value:''});
   if (t === 'input') Object.assign(b, {name:'', prompt:''});
   if (t === 'output') b.expr = '';
-  if (t === 'set') Object.assign(b, {name:'', expr:''});
+  if (t === 'set') Object.assign(b, {name:'', vtype:'int', expr:''});
   if (t === 'if') Object.assign(b, {cond:'', yes:[], no:[]});
   if (t === 'while') Object.assign(b, {cond:'', body:[]});
   if (t === 'for') Object.assign(b, {name:'i', from:'1', to:'10', step:'1', body:[]});
@@ -341,11 +343,13 @@ function contains(block, id){
   walk([block], b => { if (b.id === id) found = true; });
   return found;
 }
-// name -> vtype, for every variable the program creates (Variable blocks and count-loop counters)
-function knownVars(){
+// name -> vtype, for every variable the program creates (Set value blocks and count-loop counters).
+// The first Set value for a name decides its type. skipId leaves out the block being edited.
+function knownVars(skipId){
   const m = new Map();
   walk(state.body, b => {
-    if (b.t === 'var' && b.name && !m.has(b.name)) m.set(b.name, b.vtype);
+    if (b.id === skipId) return;
+    if (b.t === 'set' && b.name && !b.oldSet && !m.has(b.name)) m.set(b.name, b.vtype);
     if (b.t === 'for' && b.name && !m.has(b.name)) m.set(b.name, 'int');
   });
   return m;
@@ -360,20 +364,43 @@ function strip(list){
 }
 function hydrate(list){
   if (!Array.isArray(list)) return [];
-  return list.filter(o => o && TYPES[o.t]).map(o => {
+  return list.map(migrateOld).filter(o => o && TYPES[o.t]).map(o => {
     const b = makeBlock(o.t);
     for (const k in b){
       if (k === 'id' || k === 't') continue;
       if (Array.isArray(b[k])) b[k] = hydrate(o[k]);
       else if (typeof o[k] === 'string') b[k] = o[k];
     }
-    if (b.t === 'var' && !VTYPES[b.vtype]) b.vtype = 'text';
+    // links from before TO_STRING / TO_INTEGER / TO_DECIMAL used Python's str() / int() / float()
+    // (plain words in a Text value are not code, so they are left alone)
+    if (!(b.t === 'set' && isPlainText(b)))
+      ['expr', 'cond', 'from', 'to'].forEach(k => { if (typeof b[k] === 'string') b[k] = renameCalls(b[k], OLD_CONVERTERS); });
+    if (b.t === 'set' && o.vtype === undefined) b.oldSet = true;
+    if (b.t === 'set' && !VTYPES[b.vtype]) b.vtype = 'int';
     return b;
+  });
+}
+// Links made before Set value and Variable were merged: a Variable {name, vtype, value} becomes a Set value.
+function migrateOld(o){
+  if (!o || o.t !== 'var') return o;
+  const text = o.vtype === 'text', v = typeof o.value === 'string' ? o.value : '';
+  // plain words with a " in them would read as code, so keep them as a quoted string
+  return {...o, t:'set', expr: text && v.includes('"') ? pyQuote(v) : v};
+}
+// Old Set value blocks had no type: take it from the variable, and keep text expressions as code.
+function typeOldSets(){
+  const types = knownVars();
+  walk(state.body, b => {
+    if (!b.oldSet) return;
+    delete b.oldSet;
+    b.vtype = types.get(b.name) || (b.expr.includes('"') ? 'text' : 'int');
+    if (b.vtype === 'text' && !b.expr.includes('"')) b.expr = '"" + ' + b.expr;
   });
 }
 const serialize = () => ({v:1, title:state.title, body:strip(state.body)});
 function loadData(d){
   state = {title: (d && typeof d.title === 'string') ? d.title : 'My program', body: hydrate(d && d.body)};
+  typeOldSets();
 }
 
 const undoStack = [], redoStack = [];
@@ -617,9 +644,9 @@ function binop(op, a, b){
   }
   if (op === '+' && a.t === 'str')
     throw new PyError('TypeError', `can only concatenate str (not "${b.t}") to str`,
-      `You tried to join text with a ${FRIENDLY[b.t]} using +. Turn the number into text first with str(...), for example "Age: " + str(age). Or in an Output, use a comma instead: "Age:", age`);
+      `You tried to join text with a ${FRIENDLY[b.t]} using +. Turn the number into text first with TO_STRING(...), for example "Age: " + TO_STRING(age). Or in an Output, use a comma instead: "Age:", age`);
   const tip = (a.t === 'str' || b.t === 'str')
-    ? `You can't do maths with text. If the text holds a number, turn it into one with int(...) or float(...).`
+    ? `You can't do maths with text. If the text holds a number, turn it into one with TO_INTEGER(...) or TO_DECIMAL(...).`
     : '';
   throw new PyError('TypeError', `unsupported operand type(s) for ${op}: '${a.t}' and '${b.t}'`, tip);
 }
@@ -635,7 +662,7 @@ function compare(op, a, b){
   if (isNum(a) && isNum(b)){ x = num(a); y = num(b); }
   else if (a.t === 'str' && b.t === 'str'){ x = a.v; y = b.v; }
   else throw new PyError('TypeError', `'${op}' not supported between instances of '${a.t}' and '${b.t}'`,
-    `You can't compare text with a number using ${op}. If the text holds a number, make it a number with int(...).`);
+    `You can't compare text with a number using ${op}. If the text holds a number, make it a number with TO_INTEGER(...).`);
   return op === '<' ? x < y : op === '>' ? x > y : op === '<=' ? x <= y : x >= y;
 }
 function roundHalfEven(x){
@@ -654,13 +681,13 @@ function needNum(name, x){
   if (!isNum(x)) throw new PyError('TypeError', `bad operand type for ${name}(): '${x.t}'`, `${name}(...) only works with numbers.`);
 }
 const BUILTINS = {
-  str(a){ needArgs('str', a, 1, 1); return S(pyStr(a[0])); },
-  int(a){
-    needArgs('int', a, 1, 1);
+  TO_STRING(a){ needArgs('TO_STRING', a, 1, 1); return S(pyStr(a[0])); },
+  TO_INTEGER(a){
+    needArgs('TO_INTEGER', a, 1, 1);
     const x = a[0];
     if (x.t === 'str'){
       const s = x.v.trim();
-      if (!/^[+-]?\d+$/.test(s)) throw new PyError('ValueError', `invalid literal for int() with base 10: ${pyRepr(x)}`, `int(...) can only turn text into a whole number if it looks like one, e.g. "42".`);
+      if (!/^[+-]?\d+$/.test(s)) throw new PyError('ValueError', `invalid literal for int() with base 10: ${pyRepr(x)}`, `TO_INTEGER(...) can only turn text into a whole number if it looks like one, e.g. "42".`);
       return I(parseInt(s, 10));
     }
     if (x.t === 'float'){
@@ -669,15 +696,15 @@ const BUILTINS = {
     }
     return I(num(x));
   },
-  float(a){
-    needArgs('float', a, 1, 1);
+  TO_DECIMAL(a){
+    needArgs('TO_DECIMAL', a, 1, 1);
     const x = a[0];
     if (x.t === 'str'){
       const s = x.v.trim().toLowerCase();
       if (/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(s)) return F(parseFloat(s));
       if (/^[+-]?(inf|infinity)$/.test(s)) return F(s[0] === '-' ? -Infinity : Infinity);
       if (/^[+-]?nan$/.test(s)) return F(NaN);
-      throw new PyError('ValueError', `could not convert string to float: ${pyRepr(x)}`, `float(...) can only turn text into a number if it looks like one, e.g. "3.5".`);
+      throw new PyError('ValueError', `could not convert string to float: ${pyRepr(x)}`, `TO_DECIMAL(...) can only turn text into a number if it looks like one, e.g. "3.5".`);
     }
     return F(num(x));
   },
@@ -740,7 +767,7 @@ function evalNode(n, env){
   }
 }
 function nameTip(name){
-  return `There is no variable called "${name}" yet. Add a Variable shape before this one to create it (names are case-sensitive). If you meant the word itself, put it in quotes: "${name}"`;
+  return `There is no variable called "${name}" yet. Add a Set value shape before this one to create it (names are case-sensitive). If you meant the word itself, put it in quotes: "${name}"`;
 }
 // names and functions an expression uses — for checking in the editor
 function collectNames(n, out){
@@ -755,19 +782,31 @@ function collectNames(n, out){
 /* ============================================================
    Python code generation
    ============================================================ */
+// FlowPy's conversion helpers and the Python functions they become
+const CONVERTERS = {TO_STRING:'str', TO_INTEGER:'int', TO_DECIMAL:'float'};
+const OLD_CONVERTERS = {str:'TO_STRING', int:'TO_INTEGER', float:'TO_DECIMAL'};
+// rename helper calls (name followed by "(") in an expression, leaving quoted text alone
+function renameCalls(src, names){
+  const re = new RegExp(`\\b(${Object.keys(names).join('|')})(?=\\s*\\()`, 'g');
+  return String(src).split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/)
+    .map((part, i) => i % 2 ? part : part.replace(re, m => names[m])).join('');
+}
 const pyQuote = s => JSON.stringify(s);
 const promptText = b => (b.prompt && !/\s$/.test(b.prompt)) ? b.prompt + ' ' : b.prompt;
-function literalPy(b){
-  if (b.vtype === 'text') return pyQuote(b.value);
-  if (b.vtype === 'int') return b.value.trim() ? String(parseInt(b.value, 10)) : '0';
-  const v = b.value.trim();
-  if (!v) return '0.0';
-  return /[.eE]/.test(v) ? v.replace(/^\+/, '') : v.replace(/^\+/, '') + '.0';
-}
-function literalValue(b){
-  if (b.vtype === 'text') return S(b.value);
-  if (b.vtype === 'int') return I(b.value.trim() ? parseInt(b.value, 10) : 0);
-  return F(b.value.trim() ? parseFloat(b.value) : 0);
+// Set value: a Text value is plain words unless it has a " in it (then it is code, e.g. "Hi " + name).
+// A Number or Decimal value is a number or maths; empty means 0.
+const NUM_LIT = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+const isPlainText = b => b.vtype === 'text' && !b.expr.includes('"');
+// a True/False value can also be typed as true / false (any case) or 1 / 0
+const boolWord = v => ({true:'True', '1':'True', false:'False', '0':'False'})[v.trim().toLowerCase()];
+function setPy(b){
+  if (isPlainText(b)) return pyQuote(b.expr);
+  const v = b.expr.trim();
+  if (!v) return {float:'0.0', bool:'False'}[b.vtype] || '0';
+  if (b.vtype === 'bool' && boolWord(v)) return boolWord(v);
+  if (/^[+-]?\d+$/.test(v)) return b.vtype === 'float' ? v.replace(/^\+/, '') + '.0' : String(parseInt(v, 10));
+  if (NUM_LIT.test(v)) return v.replace(/^\+/, '');
+  return v;
 }
 function rangePy(b){
   const step = parseInt(b.step, 10) || 1;
@@ -779,14 +818,13 @@ function rangePy(b){
 }
 function genPython(){
   const lines = [], vars = knownVars();
-  const emit = (ind, text, id, main = true) => lines.push({text:'    '.repeat(ind) + text, id, main});
+  const emit = (ind, text, id, main = true) => lines.push({text:'    '.repeat(ind) + renameCalls(text, CONVERTERS), id, main});
   function seq(list, ind, ownerId){
     if (!list.length){ emit(ind, 'pass', ownerId, false); return; }
     list.forEach(b => blk(b, ind));
   }
   function blk(b, ind){
     switch (b.t){
-      case 'var': emit(ind, `${b.name || '?'} = ${literalPy(b)}`, b.id); break;
       case 'input': {
         const p = b.prompt ? `input(${pyQuote(promptText(b))})` : 'input()';
         const vt = vars.get(b.name);
@@ -794,7 +832,7 @@ function genPython(){
         break;
       }
       case 'output': emit(ind, `print(${b.expr})`, b.id); break;
-      case 'set': emit(ind, `${b.name || '?'} = ${b.expr}`, b.id); break;
+      case 'set': emit(ind, `${b.name || '?'} = ${setPy(b)}`, b.id); break;
       case 'if':
         emit(ind, `if ${b.cond}:`, b.id);
         seq(b.yes, ind + 1, b.id);
@@ -813,11 +851,68 @@ function genPython(){
   return lines;
 }
 
-const PY_HL = /(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(if|else|while|for|in|and|or|not|True|False|pass)\b|\b(print|input|int|float|str|range|len|round|abs|min|max)\b|\b(\d+(?:\.\d+)?)\b/g;
-function highlightPy(text){
+/* ============================================================
+   Pseudocode generation (same line structure as genPython, so
+   run highlighting and hover links work in either view)
+   ============================================================ */
+// rewrite the Python operators in an expression as pseudocode words; text in quotes is left alone
+function pseudoExpr(src){
+  return String(src).split(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/).map((part, i) => i % 2 ? part : part
+    .replace(/\s*\/\/\s*/g, ' DIV ').replace(/\s*%\s*/g, ' MOD ').replace(/\*\*/g, '^')
+    .replace(/==/g, '=').replace(/!=/g, '≠').replace(/<=/g, '≤').replace(/>=/g, '≥')
+    .replace(/\band\b/g, 'AND').replace(/\bor\b/g, 'OR').replace(/\bnot\b/g, 'NOT')
+    .replace(/\bTrue\b/g, 'TRUE').replace(/\bFalse\b/g, 'FALSE')
+  ).join('').trim();
+}
+function genPseudo(){
+  const lines = [];
+  const emit = (ind, text, id, main = true) => lines.push({text:'    '.repeat(ind) + text, id, main});
+  function seq(list, ind, ownerId){
+    if (!list.length){ emit(ind, '// nothing here yet', ownerId, false); return; }
+    list.forEach(b => blk(b, ind));
+  }
+  function blk(b, ind){
+    switch (b.t){
+      case 'input':
+        if (b.prompt) emit(ind, `OUTPUT ${pyQuote(b.prompt)}`, b.id);
+        emit(ind, `INPUT ${b.name || '?'}`, b.id);
+        break;
+      case 'output': emit(ind, `OUTPUT ${pseudoExpr(b.expr)}`, b.id); break;
+      case 'set': emit(ind, `SET ${b.name || '?'} TO ${isPlainText(b) ? pyQuote(b.expr) : pseudoExpr(setPy(b))}`, b.id); break;
+      case 'if':
+        emit(ind, `IF ${pseudoExpr(b.cond)} THEN`, b.id);
+        seq(b.yes, ind + 1, b.id);
+        if (b.no.length){ emit(ind, 'ELSE', b.id, false); seq(b.no, ind + 1, b.id); }
+        emit(ind, 'ENDIF', b.id, false);
+        break;
+      case 'while':
+        emit(ind, `WHILE ${pseudoExpr(b.cond)} DO`, b.id);
+        seq(b.body, ind + 1, b.id);
+        emit(ind, 'ENDWHILE', b.id, false);
+        break;
+      case 'for': {
+        const step = parseInt(b.step, 10) || 1;
+        emit(ind, `FOR ${b.name} FROM ${pseudoExpr(b.from)} TO ${pseudoExpr(b.to)}${step !== 1 ? ` STEP ${step}` : ''} DO`, b.id);
+        seq(b.body, ind + 1, b.id);
+        emit(ind, 'ENDFOR', b.id, false);
+        break;
+      }
+    }
+  }
+  state.body.forEach(b => blk(b, 0));
+  return lines;
+}
+const PSEUDO_HL = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(SET|TO|INPUT|OUTPUT|IF|THEN|ELSE|ENDIF|WHILE|DO|ENDWHILE|FOR|FROM|STEP|ENDFOR|AND|OR|NOT|MOD|DIV|TRUE|FALSE)\b|\b(TO_STRING|TO_INTEGER|TO_DECIMAL|len|round|abs|min|max)\b|\b(\d+(?:\.\d+)?)\b/g;
+
+let codeMode = 'pseudo'; // 'pseudo' | 'python' — which view the code panel shows
+try { if (localStorage.getItem('flowpy.codeMode') === 'python') codeMode = 'python'; } catch {}
+const genCode = () => codeMode === 'python' ? genPython() : genPseudo();
+
+const PY_HL =/(#.*$)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\b(if|else|while|for|in|and|or|not|True|False|pass)\b|\b(print|input|int|float|str|range|len|round|abs|min|max)\b|\b(\d+(?:\.\d+)?)\b/g;
+function highlightPy(text, re = PY_HL){
   let out = '', last = 0, m;
-  PY_HL.lastIndex = 0;
-  while ((m = PY_HL.exec(text))){
+  re.lastIndex = 0;
+  while ((m = re.exec(text))){
     out += esc(text.slice(last, m.index));
     const cls = m[1] ? 'c' : m[2] ? 's' : m[3] ? 'k' : m[4] ? 'b' : 'n';
     out += `<span class="${cls}">${esc(m[0])}</span>`;
@@ -826,14 +921,21 @@ function highlightPy(text){
   return out + esc(text.slice(last));
 }
 function renderCode(){
-  const lines = genPython();
+  const py = codeMode === 'python';
+  $('#codeTitle').textContent = py ? 'Python code' : 'Pseudocode';
+  document.querySelectorAll('#codeSwitch button').forEach(b => {
+    b.classList.toggle('on', b.dataset.mode === codeMode);
+    b.setAttribute('aria-pressed', b.dataset.mode === codeMode);
+  });
+  const lines = genCode();
   const el = $('#code');
   if (!lines.length){
-    el.innerHTML = `<div class="cl"><span class="ln">1</span><span class="c"># Add shapes to your flowchart and</span></div><div class="cl"><span class="ln">2</span><span class="c"># the Python code will appear here.</span></div>`;
+    const c = py ? '#' : '//';
+    el.innerHTML = `<div class="cl"><span class="ln">1</span><span class="c">${c} Add shapes to your flowchart and</span></div><div class="cl"><span class="ln">2</span><span class="c">${c} the ${py ? 'Python code' : 'pseudocode'} will appear here.</span></div>`;
     return;
   }
   el.innerHTML = lines.map((l, i) =>
-    `<div class="cl${l.main ? ' main' : ''}" data-id="${l.id}"><span class="ln">${i + 1}</span><span>${highlightPy(l.text)}</span></div>`).join('');
+    `<div class="cl${l.main ? ' main' : ''}" data-id="${l.id}"><span class="ln">${i + 1}</span><span>${highlightPy(l.text, py ? PY_HL : PSEUDO_HL)}</span></div>`).join('');
 }
 
 /* ============================================================
@@ -846,14 +948,9 @@ const short = s => s.length > MAXLABEL ? s.slice(0, MAXLABEL - 1) + '…' : s;
 
 function labelOf(b){
   switch (b.t){
-    case 'var': {
-      if (!b.name) return '';
-      const v = b.value.trim() === '' ? '' : ' = ' + (b.vtype === 'text' ? pyQuote(b.value) : b.value.trim());
-      return `${b.name} (${VTYPES[b.vtype]})${v}`;
-    }
     case 'input': return b.name ? `ask → ${b.name}` : '';
     case 'output': return b.expr;
-    case 'set': return b.name ? `${b.name} = ${b.expr}` : '';
+    case 'set': return b.name ? `${b.name} = ${setPy(b)}` : '';
     case 'if': case 'while': return b.cond ? b.cond + ' ?' : '';
     case 'for': return b.name ? `${b.name} = ${b.from} to ${b.to}` + ((parseInt(b.step, 10) || 1) !== 1 ? `, step ${b.step}` : '') : '';
   }
@@ -893,7 +990,6 @@ function shapeSvg(t, cx, y, w, h){
   const x0 = cx - w / 2;
   switch (t){
     case 'term': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="${h / 2}"/>`;
-    case 'var': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="shape" style="fill:none" d="M${x0 + 9} ${y}V${y + h}M${x0} ${y + 9}H${x0 + w}"/>`;
     case 'set': return `<rect class="shape" x="${x0}" y="${y}" width="${w}" height="${h}" rx="4"/>`;
     case 'input': case 'output': return `<path class="shape" d="M${x0 + 16} ${y}H${x0 + w}L${x0 + w - 16} ${y + h}H${x0}Z"/>`;
     case 'if': case 'while': return `<path class="shape" d="M${cx} ${y}L${x0 + w} ${y + h / 2}L${cx} ${y + h}L${x0} ${y + h / 2}Z"/>`;
@@ -1010,7 +1106,6 @@ function hoverLink(id){
    ============================================================ */
 function iconSvg(t){
   const shapes = {
-    var: '<rect x="4" y="4" width="32" height="20" rx="2"/><path d="M9 4V24M4 9H36" style="fill:none"/>',
     set: '<rect x="4" y="4" width="32" height="20" rx="2"/>',
     input: '<path d="M10 4H36L30 24H4Z"/>',
     output: '<path d="M10 4H36L30 24H4Z"/>',
@@ -1124,38 +1219,38 @@ function openEditor(block, insert){
   $('#mSub').textContent = TYPES[t].desc + '.';
   $('#mDelete').hidden = !!insert;
   const vars = knownVars();
+  // Input can store a typed answer in Text, Number or Decimal variables, not True/False ones
+  const answerVars = [...vars].filter(([, vt]) => vt !== 'bool');
   const varOptions = sel => {
-    if (!vars.size) return '';
-    return [...vars].map(([n, vt]) => `<option value="${esc(n)}"${n === sel ? ' selected' : ''}>${esc(n)}  (${VTYPES[vt]})</option>`).join('');
+    return answerVars.map(([n, vt]) => `<option value="${esc(n)}"${n === sel ? ' selected' : ''}>${esc(n)}  (${VTYPES[vt]})</option>`).join('');
   };
   const chips = (forId, extra) => {
     const vchips = [...vars.keys()].map(n => `<button type="button" class="chip var" data-ins="${esc(n)}" data-for="${forId}">${esc(n)}</button>`).join('');
     return `<div class="chips">${vchips}${extra.map(x => `<button type="button" class="chip" data-ins="${esc(x)}" data-for="${forId}">${esc(x)}</button>`).join('')}</div>`;
   };
-  const noVars = `<div class="field"><div class="err">There are no variables yet. First add a Variable shape (above this one) to store the value in.</div></div>`;
+  const noVars = `<div class="field"><div class="err">There are no variables yet. First add a Set value shape (above this one) to store the value in.</div></div>`;
   let html = '';
-  if (t === 'var'){
-    html = `
-      <div class="field" id="fName"><label for="iName">Name</label><input type="text" id="iName" value="${esc(d.name)}" placeholder="e.g. age" autocomplete="off" spellcheck="false"><div class="hint">One word. Letters, numbers and _ only (spaces become _).</div></div>
-      <div class="field"><label>Type of value</label><div class="seg" id="segType">
-        ${Object.entries(VTYPES).map(([k, l]) => `<button type="button" data-v="${k}" class="${d.vtype === k ? 'on' : ''}">${l}<small>${{text:'"hello"', int:'42', float:'3.5'}[k]}</small></button>`).join('')}
-      </div></div>
-      <div class="field" id="fValue"><label for="iValue">Starting value <span style="font-weight:600;color:var(--muted)">(optional)</span></label><input type="text" id="iValue" value="${esc(d.value)}" autocomplete="off"><div class="hint" id="valueHint"></div></div>`;
-  } else if (t === 'input'){
-    html = vars.size ? `
+  if (t === 'input'){
+    html = answerVars.length ? `
       <div class="field"><label for="iName">Store the answer in</label><select id="iName">${varOptions(d.name)}</select><div class="hint">A Number or Decimal variable will turn the answer into a number.</div></div>
       <div class="field"><label for="iPrompt">Question to show <span style="font-weight:600;color:var(--muted)">(optional)</span></label><input type="text" id="iPrompt" value="${esc(d.prompt)}" placeholder="e.g. What is your name?" autocomplete="off"><div class="hint">Just type the words — no quotes needed.</div></div>` : noVars;
   } else if (t === 'output'){
     html = `
       <div class="field" id="fExpr"><label for="iExpr">What to show</label><input type="text" class="mono" id="iExpr" value="${esc(d.expr)}" placeholder='"Hello, " + name' autocomplete="off" spellcheck="false">
-      ${chips('iExpr', ['" "', '+', ','])}
+      ${chips('iExpr', ['" "', '+', ',', 'TO_STRING()'])}
       <div class="hint">Words go inside quotes: <b>"Hello"</b>. A variable name has no quotes: <b>name</b>. Join pieces with a comma: <b>"Age:", age</b> — or with <b>+</b> if they are all text.</div></div>`;
   } else if (t === 'set'){
-    html = vars.size ? `
-      <div class="field"><label for="iName">Variable to change</label><select id="iName">${varOptions(d.name)}</select></div>
-      <div class="field" id="fExpr"><label for="iExpr">New value</label><input type="text" class="mono" id="iExpr" value="${esc(d.expr)}" placeholder="score + 1" autocomplete="off" spellcheck="false">
-      ${chips('iExpr', ['+', '-', '*', '/', '%', '" "', 'str()', 'int()'])}
-      <div class="hint">Use maths with numbers and variables, e.g. <b>price * 2</b>. Text goes in quotes.</div></div>` : noVars;
+    const others = [...knownVars(editing.orig?.id).keys()];
+    html = `
+      <div class="field" id="fName"><label for="iName">Variable name</label><input type="text" id="iName" value="${esc(d.name)}" placeholder="e.g. score" autocomplete="off" spellcheck="false">
+      ${others.length ? `<div class="chips">${others.map(n => `<button type="button" class="chip var" data-name="${esc(n)}">${esc(n)}</button>`).join('')}</div>` : ''}
+      <div class="hint">A new name creates a variable. Pick an existing one to change its value. Letters, numbers and _ only.</div></div>
+      <div class="field"><label>Type of value</label><div class="seg" id="segType">
+        ${Object.entries(VTYPES).map(([k, l]) => `<button type="button" data-v="${k}" class="${d.vtype === k ? 'on' : ''}">${l}<small>${{text:'"hello"', int:'42', float:'3.5', bool:'True'}[k]}</small></button>`).join('')}
+      </div></div>
+      <div class="field" id="fExpr"><label for="iExpr">Value</label><input type="text" id="iExpr" value="${esc(d.expr)}" autocomplete="off" spellcheck="false">
+      ${chips('iExpr', ['+', '-', '*', '/', '%', 'TO_STRING()', 'TO_INTEGER()', 'TO_DECIMAL()', 'True', 'False', '==', '!=', '<', '>', '<=', '>=', 'and', 'or', 'not'])}
+      <div class="hint" id="valueHint"></div></div>`;
   } else if (t === 'if' || t === 'while'){
     html = `
       <div class="field" id="fExpr"><label for="iExpr">${t === 'if' ? 'Question (Yes or No?)' : 'Keep repeating while…'}</label><input type="text" class="mono" id="iExpr" value="${esc(d.cond)}" placeholder="${t === 'if' ? 'age >= 18' : 'count < 10'}" autocomplete="off" spellcheck="false">
@@ -1172,7 +1267,7 @@ function openEditor(block, insert){
       ${chips('iTo', [])}
       <div class="hint" style="color:var(--muted);font-size:12.5px">Counts from <b>From</b> up to <b>To</b>, including both. Use a step of −1 to count down. From and To can be numbers or variables.</div>`;
   }
-  html += `<div class="field"><label>Python</label><div class="py-preview" id="pyPrev"></div></div>`;
+  html += `<div class="field"><label>Pseudocode</label><div class="py-preview" id="pyPrev"></div></div>`;
   $('#mBody').innerHTML = html;
   $('#modal').hidden = false;
 
@@ -1185,7 +1280,21 @@ function openEditor(block, insert){
   });
   $('#mBody').addEventListener('input', updatePreview);
   $('#mBody').addEventListener('change', updatePreview);
-  $('#mBody').querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => insertAtCursor($('#' + c.dataset.for), c.dataset.ins)));
+  $('#mBody').querySelectorAll('.chip[data-ins]').forEach(c => c.addEventListener('click', () => insertAtCursor($('#' + c.dataset.for), c.dataset.ins)));
+  if (t === 'set'){
+    // picking or typing an existing variable's name switches the type to match it
+    const matchType = () => {
+      const vt = knownVars(editing.orig?.id).get($('#iName').value.trim());
+      if (vt) $('#segType').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === vt));
+    };
+    $('#iName').addEventListener('input', matchType);
+    $('#mBody').querySelectorAll('.chip[data-name]').forEach(c => c.addEventListener('click', () => {
+      $('#iName').value = c.dataset.name;
+      matchType();
+      updatePreview();
+      $('#iExpr').focus();
+    }));
+  }
   updatePreview();
   const first = $('#mBody').querySelector('input[type=text], select');
   if (first) setTimeout(() => { first.focus(); if (first.select && first.value) first.select(); }, 30);
@@ -1210,14 +1319,15 @@ function insertAtCursor(input, text){
 
 function readForm(){
   const d = editing.draft, v = id => { const el = $('#' + id); return el ? el.value : undefined; };
-  if (d.t === 'var'){
-    d.name = (v('iName') || '').trim().replace(/\s+/g, '_');
-    d.vtype = $('#segType .on')?.dataset.v || 'text';
-    d.value = d.vtype === 'text' ? v('iValue') : v('iValue').trim();
-  }
   if (d.t === 'input'){ if (v('iName') !== undefined) d.name = v('iName'); d.prompt = v('iPrompt') ?? d.prompt; }
   if (d.t === 'output') d.expr = normalizeQuotes(v('iExpr').trim());
-  if (d.t === 'set'){ if (v('iName') !== undefined) d.name = v('iName'); if (v('iExpr') !== undefined) d.expr = normalizeQuotes(v('iExpr').trim()); }
+  if (d.t === 'set'){
+    d.name = v('iName').trim().replace(/\s+/g, '_');
+    d.vtype = $('#segType .on')?.dataset.v || 'int';
+    // plain words keep their spaces; code (numbers, maths, or text with quotes) is trimmed
+    const raw = normalizeQuotes(v('iExpr'));
+    d.expr = d.vtype === 'text' && !raw.includes('"') ? v('iExpr') : raw.trim();
+  }
   if (d.t === 'if' || d.t === 'while') d.cond = normalizeQuotes(v('iExpr').trim());
   if (d.t === 'for'){
     d.name = v('iName').trim().replace(/\s+/g, '_');
@@ -1230,7 +1340,7 @@ function readForm(){
 // returns {fieldId: message}
 function validate(d){
   const errs = {};
-  const vars = knownVars();
+  const vars = knownVars(editing?.orig?.id);
   if (d.t === 'for' && d.name) vars.set(d.name, 'int');
   const checkName = (fid, name) => {
     if (!name) errs[fid] = 'Please give it a name.';
@@ -1246,6 +1356,7 @@ function validate(d){
       for (const c of used.calls){
         if (c === 'print') { errs[fid] = 'No need for print( ) — the Output shape already shows it.'; return; }
         if (c === 'input') { errs[fid] = 'Use an Input shape to ask the user something.'; return; }
+        if (OLD_CONVERTERS[c]){ errs[fid] = `Use ${OLD_CONVERTERS[c]}( ) instead of ${c}( ).`; return; }
         if (!BUILTINS[c]){ errs[fid] = `Unknown helper "${c}( )". You can use: ${Object.keys(BUILTINS).join(', ')}.`; return; }
       }
       for (const n of used.names){
@@ -1253,14 +1364,18 @@ function validate(d){
       }
     } catch (e){ errs[fid] = e.tip || e.message; }
   };
-  if (d.t === 'var'){
+  if (d.t === 'set'){
     checkName('fName', d.name);
-    if (d.vtype === 'int' && d.value && !/^[+-]?\d+$/.test(d.value)) errs.fValue = 'A Number must be a whole number like 0, 7 or -3. Choose Decimal for numbers like 2.5.';
-    if (d.vtype === 'float' && d.value && !/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(d.value)) errs.fValue = 'A Decimal must be a number like 2.5 or 10.';
+    const v = d.expr.trim();
+    if (isPlainText(d) || !v || d.vtype === 'bool' && boolWord(v)) { /* plain words, empty (0), or true / false / 1 / 0 */ }
+    else if (d.vtype === 'int' && NUM_LIT.test(v) && !/^[+-]?\d+$/.test(v)) errs.fExpr = 'A Number must be a whole number like 0, 7 or -3. Choose Decimal for numbers like 2.5.';
+    else if (d.vtype === 'bool' && NUM_LIT.test(v)) errs.fExpr = 'Only 1 or 0 can be used as True or False. For other numbers, choose Number.';
+    else if (d.vtype === 'bool' && /^[A-Za-z_]\w*$/.test(v) && !vars.has(v)) errs.fExpr = `Use True or False (or 1 / 0). "${v}" is not a variable.`;
+    else if (d.vtype !== 'text' && /^"[^"]*"$/.test(v)) errs.fExpr = `That is text, not a number. Choose Text, or remove the quotes.`;
+    else checkExpr('fExpr', v, false);
   }
-  if ((d.t === 'input' || d.t === 'set') && !vars.size) errs._ = 'no vars';
+  if (d.t === 'input' && ![...vars.values()].some(vt => vt !== 'bool')) errs._ = 'no vars';
   if (d.t === 'output') checkExpr('fExpr', d.expr, true);
-  if (d.t === 'set' && vars.size) checkExpr('fExpr', d.expr, false);
   if (d.t === 'if' || d.t === 'while') checkExpr('fExpr', d.cond, false);
   if (d.t === 'for'){
     checkName('fName', d.name);
@@ -1273,10 +1388,18 @@ function validate(d){
 function updatePreview(){
   if (!editing) return;
   const d = readForm();
-  if (d.t === 'var'){
-    $('#valueHint').textContent = {text:'Type the text as it is — no quotes needed. Leave empty for blank text.', int:'A whole number. Leave empty to start at 0.', float:'A number that can have a decimal point. Leave empty to start at 0.0.'}[d.vtype];
-    $('#iValue').placeholder = {text:'e.g. Alex', int:'0', float:'0.0'}[d.vtype];
-    $('#iValue').classList.toggle('mono', d.vtype !== 'text');
+  if (d.t === 'set'){
+    $('#valueHint').innerHTML = {
+      text:'Type the words as they are — no quotes needed. Leave empty for blank text. To mix in a variable, use quotes: <b>"Hi " + name</b>',
+      int:'A whole number like <b>10</b>, or maths like <b>score + 1</b>. Leave empty for 0.',
+      float:'A number like <b>2.5</b>, or maths like <b>price * 2</b>. Leave empty for 0.0.',
+      bool:'<b>True</b> or <b>False</b> (or <b>1</b> / <b>0</b>), or a question like <b>age >= 18</b>. Leave empty for False.'}[d.vtype];
+    // show the helper chips that fit this type
+    const fit = {text:['+', 'TO_STRING()'], int:['+', '-', '*', '/', '%', 'TO_INTEGER()'], float:['+', '-', '*', '/', '%', 'TO_DECIMAL()'],
+      bool:['True', 'False', '==', '!=', '<', '>', '<=', '>=', 'and', 'or', 'not']}[d.vtype];
+    $('#fExpr').querySelectorAll('.chip:not(.var)').forEach(c => c.hidden = !fit.includes(c.dataset.ins));
+    $('#iExpr').placeholder = {text:'e.g. Alex', int:'0', float:'0.0', bool:'False'}[d.vtype];
+    $('#iExpr').classList.toggle('mono', !isPlainText(d));
   }
   const errs = validate(d);
   $('#mBody').querySelectorAll('.field').forEach(f => { f.classList.remove('bad'); f.querySelector('.err.live')?.remove(); });
@@ -1288,18 +1411,12 @@ function updatePreview(){
   const saved = state.body;
   const temp = JSON.parse(JSON.stringify(d));
   (CHILD_KEYS[d.t] || []).forEach(k => temp[k] = []);
-  const vars = knownVars();
   let lines;
   state = {...state, body:[temp]};
-  try {
-    lines = genPython();
-    if (d.t === 'input'){
-      const p = d.prompt ? `input(${pyQuote(promptText(d))})` : 'input()';
-      const vt = vars.get(d.name);
-      lines = [{text:`${d.name} = ${vt === 'int' ? `int(${p})` : vt === 'float' ? `float(${p})` : p}`}];
-    }
-  } finally { state.body = saved; }
-  prev.textContent = lines.filter(l => l.text.trim() !== 'pass').map(l => l.text).join('\n') + (CHILD_KEYS[d.t] ? '\n    ...' : '');
+  try { lines = genPseudo(); } finally { state.body = saved; }
+  const text = lines.filter(l => l.main).map(l => l.text);
+  if (CHILD_KEYS[d.t]) text.push('    ...', lines[lines.length - 1].text);
+  prev.textContent = text.join('\n');
 }
 function showErrors(errs){
   for (const [fid, msg] of Object.entries(errs)){
@@ -1411,7 +1528,7 @@ function convertInput(raw, vt, name){
       `"${name}" is a Number variable, so the answer must be a whole number like 42.` + (/^[+-]?\d*\.\d+$/.test(s) ? ' To allow answers like 4.5, change the variable type to Decimal.' : ''));
     return I(parseInt(s, 10));
   }
-  if (vt === 'float') return BUILTINS.float([S(raw)]);
+  if (vt === 'float') return BUILTINS.TO_DECIMAL([S(raw)]);
   return S(raw);
 }
 const evalExpr = src => evalNode(parseCached(src, false)[0], run.env);
@@ -1421,7 +1538,6 @@ async function execBlock(b){
   await tick(b.id);
   const env = run.env;
   switch (b.t){
-    case 'var': env.set(b.name, literalValue(b)); break;
     case 'input': {
       const raw = await askInput(promptText(b));
       env.set(b.name, convertInput(raw, run.vars.get(b.name), b.name));
@@ -1432,7 +1548,15 @@ async function execBlock(b){
       out(esc(vals.map(pyStr).join(' ')));
       break;
     }
-    case 'set': env.set(b.name, evalExpr(b.expr)); break;
+    case 'set': {
+      const v = b.expr.trim();
+      if (isPlainText(b)) env.set(b.name, S(b.expr));
+      else if (!v) env.set(b.name, b.vtype === 'float' ? F(0) : b.vtype === 'bool' ? B(false) : I(0));
+      else if (b.vtype === 'float' && NUM_LIT.test(v)) env.set(b.name, F(parseFloat(v)));
+      else if (b.vtype === 'bool' && boolWord(v)) env.set(b.name, B(boolWord(v) === 'True'));
+      else env.set(b.name, evalExpr(v));
+      break;
+    }
     case 'if': await execList(truthy(evalExpr(b.cond)) ? b.yes : b.no); break;
     case 'while':
       while (truthy(evalExpr(b.cond))){ await execList(b.body); await tick(b.id); }
@@ -1510,9 +1634,9 @@ function blk(t, fields, kids){
 const EXAMPLES = {
   blank: () => ({title:'My program', body:[]}),
   hello: () => ({title:'Say hello', body:[
-    blk('var', {name:'name', vtype:'text', value:''}),
-    blk('var', {name:'age', vtype:'int', value:''}),
-    blk('var', {name:'next_year', vtype:'int', value:''}),
+    blk('set', {name:'name', vtype:'text', expr:''}),
+    blk('set', {name:'age', vtype:'int', expr:''}),
+    blk('set', {name:'next_year', vtype:'int', expr:''}),
     blk('input', {name:'name', prompt:'What is your name?'}),
     blk('input', {name:'age', prompt:'How old are you?'}),
     blk('set', {name:'next_year', expr:'age + 1'}),
@@ -1520,8 +1644,8 @@ const EXAMPLES = {
     blk('output', {expr:'"Next year you will be", next_year'}),
   ]}),
   evenodd: () => ({title:'Even or odd', body:[
-    blk('var', {name:'limit', vtype:'int', value:'10'}),
-    blk('var', {name:'evens', vtype:'int', value:'0'}),
+    blk('set', {name:'limit', vtype:'int', expr:'10'}),
+    blk('set', {name:'evens', vtype:'int', expr:'0'}),
     blk('input', {name:'limit', prompt:'Count up to which number?'}),
     blk('for', {name:'n', from:'1', to:'limit', step:'1'}, {body:[
       blk('if', {cond:'n % 2 == 0'}, {
@@ -1631,7 +1755,14 @@ function wire(){
   $('#btnRun').addEventListener('click', runProgram);
   $('#btnClear').addEventListener('click', () => { if (!run){ $('#output').innerHTML = ''; lastEnv = null; renderVars(); } });
   $('#btnCopyCode').addEventListener('click', async () => {
-    toast(await copyText(genPython().map(l => l.text).join('\n') + '\n') ? 'Python code copied' : 'Could not copy');
+    toast(await copyText(genCode().map(l => l.text).join('\n') + '\n') ? (codeMode === 'python' ? 'Python code copied' : 'Pseudocode copied') : 'Could not copy');
+  });
+  $('#codeSwitch').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.dataset.mode === codeMode) return;
+    codeMode = b.dataset.mode;
+    try { localStorage.setItem('flowpy.codeMode', codeMode); } catch {}
+    render(); // re-renders the code and restores running / error highlights
   });
   let titleTimer;
   $('#title').addEventListener('input', e => {
